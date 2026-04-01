@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import Core
 import SwiftUI
@@ -46,3 +47,4 @@ public struct TreemapView: NSViewRepresentable {
         nsView.onBreadcrumbChange = onBreadcrumbChange
     }
 }
+#endif

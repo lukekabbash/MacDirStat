@@ -1,5 +1,7 @@
 import Foundation
 
+#if canImport(Darwin)
+
 public struct ScanProgress: Sendable {
     public var scannedNodes: Int
     public var currentPath: String
@@ -256,3 +258,5 @@ public final class ScanEngine: @unchecked Sendable {
         }
     }
 }
+
+#endif

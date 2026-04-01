@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import Core
 import Foundation
@@ -46,3 +47,4 @@ public enum TreemapColorPalette {
         return NSColor(calibratedHue: hue, saturation: 0.42, brightness: 0.68, alpha: 1)
     }
 }
+#endif

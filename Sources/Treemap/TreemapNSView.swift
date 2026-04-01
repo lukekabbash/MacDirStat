@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import Core
 import Foundation
@@ -168,3 +169,4 @@ public final class TreemapNSView: NSView {
         }
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if canImport(AppKit)
 import AppKit
 import Combine
 import Core
@@ -18,3 +19,4 @@ public final class TreemapBridge: ObservableObject {
         view?.resetZoom()
     }
 }
+#endif
