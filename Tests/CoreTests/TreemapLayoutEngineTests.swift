@@ -4,7 +4,7 @@ import XCTest
 final class TreemapLayoutEngineTests: XCTestCase {
     func testLayoutFillsUnitSquare() {
         var arena = ScanNodeArena()
-        arena.reset(rootName: "R", path: "/R")
+        arena.reset(rootName: "R", rootPath: "/R")
         _ = arena.addChild(
             parent: .root,
             kind: .file,

@@ -4,7 +4,7 @@ import XCTest
 final class ScanNodeArenaTests: XCTestCase {
     func testAggregateTotalsRollsUpToRoot() {
         var arena = ScanNodeArena()
-        arena.reset(rootName: "Root", path: "/Root")
+        arena.reset(rootName: "Root", rootPath: "/Root")
         let f1 = arena.addChild(
             parent: .root,
             kind: .file,
