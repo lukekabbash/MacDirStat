@@ -18,6 +18,10 @@ public struct FileNode: Equatable, Sendable {
     public var logicalSize: UInt64
     public var allocatedSize: UInt64
     public var childCount: UInt32
+    /// Direct-child index for O(child-count) tree navigation. `.invalid` means none.
+    public var firstChildID: NodeID
+    /// Linked-list successor among a parent's direct children.
+    public var nextSiblingID: NodeID
     public var isPackage: Bool
     public var mayShareContent: Bool
     public var isSparse: Bool
@@ -32,6 +36,8 @@ public struct FileNode: Equatable, Sendable {
         logicalSize: UInt64,
         allocatedSize: UInt64,
         childCount: UInt32,
+        firstChildID: NodeID = .invalid,
+        nextSiblingID: NodeID = .invalid,
         isPackage: Bool,
         mayShareContent: Bool,
         isSparse: Bool,
@@ -45,6 +51,8 @@ public struct FileNode: Equatable, Sendable {
         self.logicalSize = logicalSize
         self.allocatedSize = allocatedSize
         self.childCount = childCount
+        self.firstChildID = firstChildID
+        self.nextSiblingID = nextSiblingID
         self.isPackage = isPackage
         self.mayShareContent = mayShareContent
         self.isSparse = isSparse

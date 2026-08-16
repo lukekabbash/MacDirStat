@@ -13,7 +13,7 @@ public struct ScanOptions: Equatable, Sendable {
 
     public init(
         metric: SizeMetric = .allocated,
-        showHiddenFiles: Bool = false,
+        showHiddenFiles: Bool = true,
         treatPackagesAsLeaves: Bool = true
     ) {
         self.metric = metric

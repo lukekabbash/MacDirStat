@@ -3,6 +3,7 @@ import Foundation
 /// Mutable builder for arena-backed nodes; produces immutable `ScanSession` snapshots.
 public struct ScanNodeArena {
     private var nodes: [FileNode] = []
+    private var lastChildIDs: [NodeID] = []
 
     public init() {}
 
@@ -22,6 +23,7 @@ public struct ScanNodeArena {
             allowedActions: [.revealInFinder]
         )
         nodes = [rootNode]
+        lastChildIDs = [.invalid]
     }
 
     public var count: Int { nodes.count }
@@ -43,6 +45,13 @@ public struct ScanNodeArena {
         let actions = ActionCapability.derive(writeAccess: writeAccess, kind: kind)
         if let pIndex = Int(exactly: parent.rawValue), nodes.indices.contains(pIndex) {
             nodes[pIndex].childCount += 1
+            if lastChildIDs[pIndex] == .invalid {
+                nodes[pIndex].firstChildID = id
+            } else {
+                let lastIndex = Int(lastChildIDs[pIndex].rawValue)
+                nodes[lastIndex].nextSiblingID = id
+            }
+            lastChildIDs[pIndex] = id
         }
         let node = FileNode(
             parentID: parent,
@@ -59,12 +68,23 @@ public struct ScanNodeArena {
             allowedActions: Set(actions.filter(\.isEnabled).map(\.action))
         )
         nodes.append(node)
+        lastChildIDs.append(.invalid)
         return id
     }
 
     /// Recompute directory totals bottom-up (allocated and logical).
     public mutating func aggregateTotals() {
         guard !nodes.isEmpty else { return }
+
+        // Snapshots are emitted while scanning. A previous snapshot has already
+        // written aggregate values into directory nodes, so clear those derived
+        // values before rolling the tree up again. Without this reset, every
+        // progressive snapshot compounds folder totals.
+        for index in nodes.indices where nodes[index].kind == .directory || nodes[index].kind == .root {
+            nodes[index].logicalSize = 0
+            nodes[index].allocatedSize = 0
+        }
+
         var logical = nodes.map(\.logicalSize)
         var allocated = nodes.map(\.allocatedSize)
         for i in (1 ..< nodes.count).reversed() {
