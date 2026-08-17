@@ -1,124 +1,74 @@
 import SwiftUI
 
-struct SettingsNavigationSidebar: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Binding var selection: SettingsSection
-    let close: () -> Void
-    @Namespace private var selectionSurface
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button(action: close) {
-                Label("Back to storage", systemImage: "chevron.left")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(DiskGelButtonStyle())
-            .padding(.horizontal, 10)
-            .padding(.top, 14)
-
-            Text("SETTINGS")
-                .font(.caption2.weight(.semibold))
-                .tracking(0.7)
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 16)
-                .padding(.top, 22)
-                .padding(.bottom, 8)
-
-            VStack(spacing: 2) {
-                ForEach(SettingsSection.allCases) { section in
-                    Button {
-                        withAnimation(reduceMotion ? nil : DiskVisualStyle.settleMotion) {
-                            selection = section
-                        }
-                    } label: {
-                        Label(section.displayName, systemImage: section.symbolName)
-                            .font(.subheadline.weight(.medium))
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 10)
-                            .frame(height: 36)
-                            .contentShape(Rectangle())
-                            .background {
-                                if selection == section {
-                                    RoundedRectangle(cornerRadius: DiskVisualStyle.rowRadius, style: .continuous)
-                                        .fill(DiskVisualStyle.selection)
-                                        .matchedGeometryEffect(id: "settings-selection", in: selectionSurface)
-                                }
-                            }
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(selection == section ? Color.primary : Color.secondary)
-                }
-            }
-            .padding(.horizontal, 6)
-
-            Spacer(minLength: 12)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Mac Directory Statistics")
-                    .font(.caption.weight(.medium))
-                Text("Private, local, and explicit by default")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(16)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(DiskVisualStyle.sidebar)
-    }
-}
-
+/// Settings remains part of the storage workspace: the rail does not change,
+/// and this single canvas keeps related choices visible without nested tabs.
 struct SettingsCanvas: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @EnvironmentObject private var model: AppModel
-
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            DiskVisualStyle.canvas.ignoresSafeArea()
-            Group {
-                switch model.settingsSection {
-                case .appearance: AppearanceSettingsView()
-                case .scanning: ScanSettingsView()
-                case .cleanup: CleanupSettingsView()
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 34) {
+                SettingsPageHeader()
+                AppearanceSettingsSection()
+                ScanningSettingsSection()
+                DeletionSettingsSection()
             }
-            .id(model.settingsSection)
-            .transition(
-                reduceMotion
-                    ? .opacity
-                    : .opacity.combined(with: .move(edge: .trailing))
-            )
+            .frame(maxWidth: 920, alignment: .leading)
+            .padding(.horizontal, 42)
+            .padding(.top, 34)
+            .padding(.bottom, 72)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: model.settingsSection)
+        .background(DiskVisualStyle.canvas)
     }
 }
 
-struct AppearanceSettingsView: View {
+private struct SettingsPageHeader: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Settings")
+                .font(.system(size: 24, weight: .semibold))
+                .tracking(-0.35)
+            Text("Appearance, scan behavior, and deletion permissions for this Mac.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct AppearanceSettingsSection: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        SettingsPage(
+        SettingsGroup(
             title: "Appearance",
-            detail: "Keep the frame quiet so the storage map can do the visual work."
+            detail: "The frame stays quiet; storage categories keep their own stable colors."
         ) {
-            SettingsSectionBlock(title: "Mode", detail: "Follow macOS or hold a specific appearance.") {
-                HStack(spacing: 8) {
-                    ForEach(DiskAppearanceMode.allCases) { mode in
-                        AppearanceModeButton(
-                            mode: mode,
-                            isSelected: model.appearanceMode == mode,
-                            action: { model.appearanceMode = mode }
-                        )
-                    }
-                }
+            SettingsRow(
+                title: "Interface appearance",
+                detail: "Follow macOS or hold a specific light or dark appearance."
+            ) {
+                InlineChoice(
+                    choices: DiskAppearanceMode.allCases,
+                    selection: $model.appearanceMode,
+                    label: { $0.displayName }
+                )
+                .frame(width: 228)
             }
 
-            SettingsSectionBlock(
-                title: "Theme",
-                detail: "Themes change semantic roles together. File colors remain stable and readable."
-            ) {
-                VStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Theme")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Soft Glass is the default. Presets change every semantic surface together.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 182, maximum: 250), spacing: 8)],
+                    spacing: 8
+                ) {
                     ForEach(DiskThemeID.allCases) { theme in
-                        ThemeChoiceRow(
+                        ThemeChoiceCard(
                             theme: theme,
                             isSelected: model.themeID == theme,
                             action: { model.themeID = theme }
@@ -126,48 +76,47 @@ struct AppearanceSettingsView: View {
                     }
                 }
             }
+            .padding(.vertical, 14)
         }
     }
 }
 
-private struct ScanSettingsView: View {
+private struct ScanningSettingsSection: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
-        SettingsPage(
+        SettingsGroup(
             title: "Scanning",
-            detail: "Choose what the next scan includes. Nothing starts until you press Scan."
+            detail: "These choices apply to the next scan. Choosing a location never starts one."
         ) {
-            SettingsSectionBlock(title: "Contents", detail: "These choices apply on the next scan or refresh.") {
-                VStack(spacing: 0) {
-                    SettingsToggleRow(
-                        title: "Include hidden items",
-                        detail: "Map dotfiles and hidden folders.",
-                        isOn: $model.showHiddenFiles
-                    )
-                    SettingsToggleRow(
-                        title: "Keep app bundles together",
-                        detail: "Measure each app fully, then present it as one block.",
-                        isOn: $model.treatPackagesAsLeaves
-                    )
-                }
-            }
-
-            SettingsSectionBlock(title: "Map", detail: "Capacity context stays visible below the map.") {
-                SettingsToggleRow(
-                    title: "Include free space in the map",
-                    detail: "Add proportional regions for free space and use outside the selected scan.",
-                    isOn: $model.showFreeSpaceInMap
-                )
-            }
+            SettingsToggleRow(
+                title: "Include hidden items",
+                detail: "Map dotfiles and hidden folders.",
+                isOn: $model.showHiddenFiles
+            )
+            SettingsToggleRow(
+                title: "Keep app bundles together",
+                detail: "Measure each app fully, then present it as one map block.",
+                isOn: $model.treatPackagesAsLeaves
+            )
+            SettingsToggleRow(
+                title: "Detailed scan progress",
+                detail: "Estimate from observed work first, then lock to a measured denominator while the map keeps growing.",
+                isOn: $model.calculatesExactProgress
+            )
+            SettingsToggleRow(
+                title: "Show capacity in the map",
+                detail: "Represent free space and used space outside the selected scope as map regions.",
+                isOn: $model.showFreeSpaceInMap
+            )
         }
     }
 }
 
-private struct CleanupSettingsView: View {
+private struct DeletionSettingsSection: View {
     @EnvironmentObject private var model: AppModel
 
-    private var cleanupBinding: Binding<Bool> {
+    private var fileChangesBinding: Binding<Bool> {
         Binding(
             get: { model.cleanupControlsEnabled },
             set: { model.setCleanupControls(enabled: $0) }
@@ -175,30 +124,35 @@ private struct CleanupSettingsView: View {
     }
 
     var body: some View {
-        SettingsPage(
-            title: "Cleanup",
-            detail: "Browsing is the default. File actions only appear after you deliberately unlock them."
+        SettingsGroup(
+            title: "Deletion",
+            detail: "Browsing is always available. Deletion requires explicit permission."
         ) {
-            SettingsSectionBlock(title: "File actions", detail: "Moving and Trash actions still ask for confirmation.") {
-                SettingsToggleRow(
-                    title: model.cleanupControlsEnabled ? "Cleanup controls enabled" : "Cleanup controls locked",
-                    detail: model.cleanupControlsEnabled
-                        ? "Reveal, open, move, and Trash controls are available in the inspector."
-                        : "The app can inspect storage but cannot offer file-changing controls.",
-                    isOn: cleanupBinding,
-                    symbol: model.cleanupControlsEnabled ? "lock.open.fill" : "lock.fill"
-                )
-            }
+            SettingsToggleRow(
+                title: "Allow deletion",
+                detail: model.cleanupControlsEnabled
+                    ? "Move to Trash is available. Every deletion still asks first."
+                    : "The app can inspect storage, but it does not offer deletion controls.",
+                isOn: fileChangesBinding,
+                symbol: model.cleanupControlsEnabled ? "lock.open.fill" : "lock.fill"
+            )
 
-            Text("Moving to Trash is recoverable through Finder. The app never permanently deletes a file and never performs an action without a confirmation step.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "shield.checkered")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18)
+                Text("Move to Trash remains recoverable in Finder. This app never permanently erases an item and never deletes without a confirmation step.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 13)
         }
     }
 }
 
-private struct SettingsPage<Content: View>: View {
+private struct SettingsGroup<Content: View>: View {
     let title: String
     let detail: String
     @ViewBuilder let content: Content
@@ -210,55 +164,56 @@ private struct SettingsPage<Content: View>: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 38) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 28, weight: .semibold))
-                        .tracking(-0.5)
-                    Text(detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                content
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: 760, alignment: .leading)
-            .padding(.horizontal, 44)
-            .padding(.vertical, 42)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(.bottom, 11)
+
+            Rectangle()
+                .fill(DiskVisualStyle.hairline)
+                .frame(height: 1)
+
+            content
         }
     }
 }
 
-private struct SettingsSectionBlock<Content: View>: View {
+private struct SettingsRow<Control: View>: View {
     let title: String
     let detail: String
-    @ViewBuilder let content: Content
+    @ViewBuilder let control: Control
 
-    init(title: String, detail: String, @ViewBuilder content: () -> Content) {
+    init(title: String, detail: String, @ViewBuilder control: () -> Control) {
         self.title = title
         self.detail = detail
-        self.content = content()
+        self.control = control()
     }
 
     var body: some View {
-        Grid(alignment: .topLeading, horizontalSpacing: 34, verticalSpacing: 0) {
-            GridRow {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(width: 178, alignment: .leading)
-
-                content
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        HStack(alignment: .center, spacing: 24) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                Text(detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            control
+                .frame(minWidth: 220, alignment: .trailing)
+        }
+        .padding(.vertical, 11)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(DiskVisualStyle.hairline)
+                .frame(height: 1)
         }
     }
 }
@@ -277,98 +232,102 @@ private struct SettingsToggleRow: View {
     }
 
     var body: some View {
-        Toggle(isOn: $isOn) {
-            HStack(alignment: .top, spacing: 10) {
+        SettingsRow(title: title, detail: detail) {
+            HStack(spacing: 10) {
                 if let symbol {
                     Image(systemName: symbol)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                        .frame(width: 18, height: 20)
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.subheadline.weight(.medium))
-                    Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Toggle(title, isOn: $isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(DiskVisualStyle.accent)
             }
         }
-        .toggleStyle(.switch)
-        .tint(DiskVisualStyle.accent)
-        .padding(.vertical, 10)
     }
 }
 
-private struct AppearanceModeButton: View {
-    let mode: DiskAppearanceMode
-    let isSelected: Bool
-    let action: () -> Void
-    @State private var isHovered = false
+private struct InlineChoice<Item: Hashable>: View {
+    let choices: [Item]
+    @Binding var selection: Item
+    let label: (Item) -> String
+    @Namespace private var selectedSurface
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 7) {
-                Image(systemName: mode.symbolName)
-                    .font(.system(size: 15, weight: .semibold))
-                Text(mode.displayName)
-                    .font(.caption.weight(.medium))
+        HStack(spacing: 2) {
+            ForEach(choices, id: \.self) { item in
+                Button {
+                    withAnimation(DiskVisualStyle.settleMotion) { selection = item }
+                } label: {
+                    Text(label(item))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(selection == item ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 27)
+                        .background {
+                            if selection == item {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(DiskVisualStyle.raisedSurface)
+                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                                    .matchedGeometryEffect(id: "inline-choice", in: selectedSurface)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
             }
-            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-            .frame(maxWidth: .infinity, minHeight: 62)
-            .background(
-                isSelected ? DiskVisualStyle.selection : isHovered ? DiskVisualStyle.controlHover : Color.clear,
-                in: RoundedRectangle(cornerRadius: DiskVisualStyle.controlRadius, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: DiskVisualStyle.controlRadius, style: .continuous)
-                    .stroke(isSelected ? DiskVisualStyle.accent.opacity(0.46) : DiskVisualStyle.hairline, lineWidth: 1)
-            }
-            .scaleEffect(isHovered ? 1.008 : 1)
         }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-        .animation(DiskVisualStyle.motion, value: isHovered)
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .padding(2)
+        .background(DiskVisualStyle.subtleSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+        }
     }
 }
 
-private struct ThemeChoiceRow: View {
+private struct ThemeChoiceCard: View {
     let theme: DiskThemeID
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 13) {
-                ThemeSwatch(theme: theme)
-                    .frame(width: 64, height: 42)
+            HStack(spacing: 10) {
+                ThemeSwatch(theme: theme, dark: colorScheme == .dark)
+                    .frame(width: 52, height: 34)
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(theme.displayName)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.caption.weight(.semibold))
+                        .lineLimit(1)
                     Text(theme.description)
-                        .font(.caption)
+                        .font(.system(size: 9.5))
                         .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
-
-                Spacer(minLength: 12)
+                Spacer(minLength: 4)
                 Image(systemName: "checkmark")
-                    .font(.caption.weight(.bold))
+                    .font(.caption2.weight(.bold))
                     .foregroundStyle(DiskVisualStyle.accentStrong)
                     .opacity(isSelected ? 1 : 0)
-                    .scaleEffect(isSelected ? 1 : 0.6)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
             .contentShape(Rectangle())
             .background(
                 isSelected ? DiskVisualStyle.selection : isHovered ? DiskVisualStyle.hover : Color.clear,
                 in: RoundedRectangle(cornerRadius: DiskVisualStyle.rowRadius, style: .continuous)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: DiskVisualStyle.rowRadius, style: .continuous)
+                    .stroke(
+                        isSelected ? DiskVisualStyle.accent.opacity(0.48) : DiskVisualStyle.hairline,
+                        lineWidth: 1
+                    )
+            }
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
@@ -380,20 +339,33 @@ private struct ThemeChoiceRow: View {
 
 private struct ThemeSwatch: View {
     let theme: DiskThemeID
-    @Environment(\.colorScheme) private var colorScheme
+    let dark: Bool
 
     var body: some View {
-        let colors = DiskVisualStyle.previewColors(for: theme, dark: colorScheme == .dark)
-        HStack(spacing: 3) {
-            ForEach(Array(colors.enumerated()), id: \.offset) { _, color in
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(color)
-            }
+        let colors = DiskVisualStyle.previewColors(for: theme, dark: dark)
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(colors[0])
+            Rectangle()
+                .fill(colors[1])
+                .frame(width: 14)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(colors[2])
+                .padding(.leading, 19)
+                .padding(.trailing, 5)
+                .padding(.vertical, 5)
+            Capsule()
+                .fill(colors[3])
+                .frame(width: 15, height: 3)
+                .offset(x: 29, y: 9)
+            Circle()
+                .fill(colors[4])
+                .frame(width: 5, height: 5)
+                .offset(x: 22, y: -8)
         }
-        .padding(5)
-        .background(colors[0], in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(DiskVisualStyle.hairline, lineWidth: 1)
         }
         .accessibilityHidden(true)

@@ -12,11 +12,12 @@ struct DiskVisualizerApp: App {
         }
         .defaultSize(width: 1_280, height: 800)
         .windowResizability(.contentMinSize)
+        .windowToolbarStyle(.unifiedCompact(showsTitle: true))
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .appSettings) {
                 Button("Settings…") {
-                    model.openSettings(.appearance)
+                    model.openSettings()
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }

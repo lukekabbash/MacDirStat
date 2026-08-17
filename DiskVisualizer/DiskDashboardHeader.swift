@@ -29,8 +29,8 @@ enum StoragePresentation {
     }
 }
 
-/// A single, stable orientation strip. It carries identity, state, essential
-/// totals, and the primary view switch without competing with the data canvas.
+/// One compact orientation strip carries location, live scan state, totals,
+/// and the workspace view. The map remains the dominant visual surface.
 struct DiskDashboardHeader: View {
     let session: ScanSession
     let metric: SizeMetric
@@ -51,44 +51,42 @@ struct DiskDashboardHeader: View {
     }
 
     var body: some View {
-        HStack(spacing: 14) {
-            orientation
-                .frame(minWidth: 170, maxWidth: 260, alignment: .leading)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                orientation
+                    .frame(minWidth: 170, maxWidth: 310, alignment: .leading)
 
-            Group {
-                if let scanActivity = scanTelemetry.activity {
-                    CompactScanActivity(activity: scanActivity)
-                        .transition(.opacity)
-                } else {
-                    snapshotSummary
-                        .transition(.opacity)
+                Group {
+                    if let activity = scanTelemetry.activity {
+                        CompactScanActivity(activity: activity)
+                    } else {
+                        Text("\(StoragePresentation.bytes(currentSize)) · \(visibleItemCount.formatted()) items")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .help(statusLine)
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .contentTransition(.numericText())
 
-            Picker("View", selection: $dashboardMode) {
-                ForEach(DashboardMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 154)
+                DashboardModeControl(selection: $dashboardMode)
+                    .frame(width: 166)
 
-            ScanStateIndicator(isScanning: isScanning, isComplete: session.isComplete)
-        }
-        .padding(.horizontal, 14)
-        .frame(height: 52)
-        .background(DiskVisualStyle.contentSurface.opacity(0.72))
-        .overlay(alignment: .bottom) {
-            if isScanning {
-                ProgressView()
+                ScanStateBadge(activity: scanTelemetry.activity, isComplete: session.isComplete)
+                    .frame(width: 74, alignment: .trailing)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 43)
+
+            if let activity = scanTelemetry.activity {
+                ProgressView(value: activity.fractionCompleted ?? 0)
                     .progressViewStyle(.linear)
                     .tint(DiskVisualStyle.accent)
                     .frame(height: 2)
                     .transition(.opacity)
             }
         }
+        .background(DiskVisualStyle.contentSurface.opacity(0.66))
         .animation(DiskVisualStyle.motion, value: isScanning)
     }
 
@@ -115,27 +113,52 @@ struct DiskDashboardHeader: View {
             }
         } else {
             Label("Storage overview", systemImage: "chart.bar.xaxis")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
+                .font(.caption.weight(.semibold))
         }
     }
+}
 
-    private var snapshotSummary: some View {
-        Text("\(StoragePresentation.bytes(currentSize)) · \(visibleItemCount.formatted()) items")
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .contentTransition(.numericText())
-            .help(statusLine)
+private struct DashboardModeControl: View {
+    @Binding var selection: DashboardMode
+    @Namespace private var selectionSurface
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(DashboardMode.allCases, id: \.self) { mode in
+                Button {
+                    withAnimation(DiskVisualStyle.settleMotion) { selection = mode }
+                } label: {
+                    Label(mode.displayName, systemImage: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(selection == mode ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 25)
+                        .background {
+                            if selection == mode {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(DiskVisualStyle.raisedSurface)
+                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                                    .matchedGeometryEffect(id: "dashboard-mode", in: selectionSurface)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(DiskVisualStyle.subtleSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+        }
     }
 }
 
 private struct CompactScanActivity: View {
     let activity: ScanActivity
+
     var body: some View {
         HStack(spacing: 6) {
-            ScanningMark()
-                .frame(width: 18, height: 18)
             Text(activity.phase.displayName)
                 .fontWeight(.medium)
             Text("·")
@@ -143,7 +166,7 @@ private struct CompactScanActivity: View {
             Text(activity.inspectedItems.formatted())
                 .monospacedDigit()
                 .contentTransition(.numericText())
-            if activity.itemsPerSecond > 1 {
+            if activity.itemsPerSecond > 1, activity.phase != .indexing {
                 Text("· \(Int(activity.itemsPerSecond).formatted())/s")
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -158,25 +181,20 @@ private struct CompactScanActivity: View {
     }
 }
 
-private struct ScanStateIndicator: View {
-    let isScanning: Bool
+private struct ScanStateBadge: View {
+    let activity: ScanActivity?
     let isComplete: Bool
 
     var body: some View {
-        HStack(spacing: 7) {
-            if isScanning {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Circle()
-                    .fill(isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention)
-                    .frame(width: 6, height: 6)
-            }
-            Text(isScanning ? "Refreshing" : isComplete ? "Current" : "Partial")
-                .font(.caption.weight(.medium))
+        HStack(spacing: 6) {
+            Circle()
+                .fill(activity == nil ? (isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention) : DiskVisualStyle.accent)
+                .frame(width: 6, height: 6)
+            Text(activity?.percentageText ?? (activity == nil ? (isComplete ? "Current" : "Partial") : "0%"))
+                .font(.caption2.weight(.semibold).monospacedDigit())
+                .contentTransition(.numericText())
         }
         .foregroundStyle(.secondary)
-        .frame(width: 74, alignment: .trailing)
         .accessibilityElement(children: .combine)
     }
 }
@@ -184,6 +202,7 @@ private struct ScanStateIndicator: View {
 extension ScanProgress.Phase {
     var displayName: String {
         switch self {
+        case .indexing: return "Indexing"
         case .discovering: return "Scanning"
         case .measuringPackage: return "Measuring app"
         case .preparingMap: return "Preparing map"
@@ -191,42 +210,39 @@ extension ScanProgress.Phase {
     }
 }
 
-struct ScanningMark: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isActive = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(DiskVisualStyle.accent.opacity(0.20), lineWidth: 2)
-            Circle()
-                .trim(from: 0.08, to: 0.64)
-                .stroke(DiskVisualStyle.accentStrong, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees(isActive ? 360 : 0))
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 1.2).repeatForever(autoreverses: false)) {
-                isActive = true
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
-struct ScanActivityDetails: View {
+/// Shared determinate treatment for first-scan and sidebar contexts.
+struct ScanProgressPanel: View {
     let activity: ScanActivity
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            HStack(spacing: 14) {
-                detail(activity.phase.displayName, systemImage: "dot.radiowaves.left.and.right")
-                detail(activity.inspectedItems.formatted(), systemImage: "doc.on.doc")
-                if activity.itemsPerSecond > 1 {
-                    detail("\(Int(activity.itemsPerSecond).formatted())/s", systemImage: "speedometer")
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(activity.phase == .indexing ? "Calculating exact total" : activity.phase.displayName)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(activity.percentageText ?? "0%")
+                    .font(.title3.weight(.semibold).monospacedDigit())
+                    .contentTransition(.numericText())
+            }
+
+            ProgressView(value: activity.fractionCompleted ?? 0)
+                .progressViewStyle(.linear)
+                .tint(DiskVisualStyle.accent)
+
+            HStack(spacing: 7) {
+                Text("\(activity.inspectedItems.formatted()) items")
+                    .monospacedDigit()
+                if let total = activity.totalItems {
+                    Text("of \(total.formatted())")
+                        .monospacedDigit()
                 }
-                detail(elapsed(from: activity.startedAt, to: context.date), systemImage: "clock")
-                detail(activity.currentLocation, systemImage: "folder")
+                if activity.itemsPerSecond > 1, activity.phase != .indexing {
+                    Text("· \(Int(activity.itemsPerSecond).formatted())/s")
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 8)
+                Text(activity.currentLocation)
+                    .lineLimit(1)
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -234,75 +250,156 @@ struct ScanActivityDetails: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Current scan activity")
     }
+}
 
-    private func detail(_ text: String, systemImage: String) -> some View {
-        Label(text, systemImage: systemImage)
-            .lineLimit(1)
-    }
+struct ScanActivityDetails: View {
+    let activity: ScanActivity
 
-    private func elapsed(from start: Date, to end: Date) -> String {
-        let seconds = max(0, Int(end.timeIntervalSince(start)))
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+    var body: some View {
+        ScanProgressPanel(activity: activity)
     }
 }
 
 struct EmptyDiskDashboard: View {
     let selectedRootName: String?
-    let startScan: () -> Void
-    let chooseFullMac: () -> Void
-    let chooseFolder: () -> Void
+    let metric: SizeMetric
+    let includesHiddenItems: Bool
+    let groupsAppBundles: Bool
 
     var body: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "internaldrive")
-                .font(.system(size: 42, weight: .regular))
-                .foregroundStyle(.secondary)
-                .symbolRenderingMode(.hierarchical)
-            VStack(spacing: 6) {
-                Text(selectedRootName == nil ? "See where the space went" : "Ready when you are")
-                    .font(.title2.weight(.semibold))
-                Text(idleDescription)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 470)
-            }
-            HStack(spacing: 10) {
-                if let selectedRootName {
-                    Button("Scan \(selectedRootName)", action: startScan)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-
-                    Menu("Change location") {
-                        Button("Full Mac…", systemImage: "desktopcomputer", action: chooseFullMac)
-                        Button("Choose Folder…", systemImage: "folder.badge.plus", action: chooseFolder)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-                } else {
-                    Button("Scan Full Mac…", action: chooseFullMac)
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                    Button("Choose Folder…", action: chooseFolder)
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("STORAGE MAP")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(.secondary)
+                    Text(selectedRootName.map { "\($0) is ready" } ?? "Choose a scope")
+                        .font(.system(size: 22, weight: .semibold))
+                        .tracking(-0.3)
+                    Text(idleDescription)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                Spacer(minLength: 32)
+                Label("Idle", systemImage: "pause.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DiskVisualStyle.available)
             }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 22)
 
-            Label("Idle · no filesystem work is running", systemImage: "pause.circle.fill")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(DiskVisualStyle.available)
+            Rectangle()
+                .fill(DiskVisualStyle.hairline)
+                .frame(height: 1)
+
+            HStack(spacing: 22) {
+                IdleTreemapPreview(scopeName: selectedRootName)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                VStack(spacing: 0) {
+                    SnapshotAttribute(label: "Scope", value: selectedRootName ?? "Not selected")
+                    SnapshotAttribute(label: "Measure", value: StoragePresentation.label(for: metric))
+                    SnapshotAttribute(label: "Hidden items", value: includesHiddenItems ? "Included" : "Excluded")
+                    SnapshotAttribute(label: "App bundles", value: groupsAppBundles ? "Grouped" : "Expanded")
+                    SnapshotAttribute(label: "Deletion", value: "Disabled")
+                }
+                .frame(width: 248)
+            }
+            .padding(22)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(48)
         .background(DiskVisualStyle.canvas)
     }
 
     private var idleDescription: String {
-        if let selectedRootName {
-            return "\(selectedRootName) is selected. Nothing scans until you start it; once running, progress stays out of the way."
+        selectedRootName == nil
+            ? "Select the full Mac or a focused folder in the sidebar."
+            : "Nothing runs until you press Scan in the sidebar."
+    }
+}
+
+private struct IdleTreemapPreview: View {
+    let scopeName: String?
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(DiskVisualStyle.contentSurface)
+
+                Group {
+                    previewBlock(x: 0.018, y: 0.025, width: 0.47, height: 0.59, color: DiskVisualStyle.accent)
+                    previewBlock(x: 0.018, y: 0.645, width: 0.47, height: 0.33, color: DiskVisualStyle.attention)
+                    previewBlock(x: 0.505, y: 0.025, width: 0.477, height: 0.37, color: DiskVisualStyle.available)
+                    previewBlock(x: 0.505, y: 0.415, width: 0.285, height: 0.56, color: DiskVisualStyle.neutral)
+                    previewBlock(x: 0.808, y: 0.415, width: 0.174, height: 0.265, color: DiskVisualStyle.accentStrong)
+                    previewBlock(x: 0.808, y: 0.70, width: 0.174, height: 0.275, color: DiskVisualStyle.available)
+                }
+                .opacity(scopeName == nil ? 0.10 : 0.16)
+
+                VStack(spacing: 7) {
+                    Image(systemName: scopeName == nil ? "folder.badge.plus" : "play.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(DiskVisualStyle.accentStrong)
+                    Text(scopeName == nil ? "Choose what to map" : "Ready to scan")
+                        .font(.headline)
+                    Text(scopeName == nil ? "Full Mac or a focused folder" : "The map will fill here as files are measured")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(18)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+            }
+            .frame(width: width, height: height)
         }
-        return "Choose the full Mac or a folder to create a new snapshot. Cleanup remains locked until you explicitly enable it."
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(scopeName == nil ? "Choose a location to map" : "Ready to scan \(scopeName ?? "location")")
+    }
+
+    private func previewBlock(
+        x: CGFloat,
+        y: CGFloat,
+        width: CGFloat,
+        height: CGFloat,
+        color: Color
+    ) -> some View {
+        GeometryReader { proxy in
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(color)
+                .padding(2)
+                .frame(width: proxy.size.width * width, height: proxy.size.height * height)
+                .offset(x: proxy.size.width * x, y: proxy.size.height * y)
+        }
+    }
+}
+
+private struct SnapshotAttribute: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value)
+                .fontWeight(.medium)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.caption)
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(DiskVisualStyle.hairline).frame(height: 1)
+        }
     }
 }
 
@@ -321,8 +418,7 @@ struct TagPill: View {
     }
 }
 
-/// Compact tactile chrome. Reading surfaces stay flat; only controls receive
-/// the short falloff, contact shadow, and small press displacement.
+/// Tactile chrome is reserved for controls; reading surfaces stay flat.
 struct DiskGelButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isEnabled) private var isEnabled

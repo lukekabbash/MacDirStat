@@ -1,3 +1,4 @@
+import AppKit
 import Core
 import SwiftUI
 import Treemap
@@ -13,12 +14,12 @@ struct StorageExplorerSidebar: View {
     @ObservedObject var scanTelemetry: ScanTelemetryState
     @Binding var selectedNodeID: NodeID?
     @Binding var metric: SizeMetric
-    @Binding var cleanupControlsEnabled: Bool
+    let isShowingSettings: Bool
     let chooseFullMac: () -> Void
     let chooseFolder: () -> Void
     let startScan: () -> Void
     let cancelScan: () -> Void
-    let openSettings: () -> Void
+    let toggleSettings: () -> Void
 
     @State private var searchText = ""
     @State private var searchResultIDs: [NodeID] = []
@@ -28,10 +29,14 @@ struct StorageExplorerSidebar: View {
     var body: some View {
         VStack(spacing: 0) {
             scopeSection
+                .fixedSize(horizontal: false, vertical: true)
             browserSection
+                .frame(minHeight: 0, maxHeight: .infinity)
+                .clipped()
             preferencesSection
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(DiskVisualStyle.sidebar)
         .task(id: searchTaskID) {
             await updateSearchResults()
@@ -49,21 +54,17 @@ struct StorageExplorerSidebar: View {
     private var scopeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: activeRoot == nil ? "folder.badge.questionmark" : "folder.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(activeRoot == nil ? Color.secondary : DiskVisualStyle.accentStrong)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .interpolation(.high)
                     .frame(width: 30, height: 30)
-                    .background(DiskVisualStyle.accent.opacity(activeRoot == nil ? 0.06 : 0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(activeRoot?.displayName ?? "No location")
+                    Text("Mac Directory Statistics")
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                    Label(
-                        cleanupControlsEnabled ? "Cleanup unlocked" : "Browse only",
-                        systemImage: cleanupControlsEnabled ? "lock.open.fill" : "lock.fill"
-                    )
+                    Text("Storage map")
                     .font(.caption)
-                    .foregroundStyle(cleanupControlsEnabled ? DiskVisualStyle.available : Color.secondary)
+                    .foregroundStyle(.secondary)
 
                     if let session {
                         Text("\(StoragePresentation.bytes(session.rootTotalAllocated)) · \(max(0, session.nodes.count - 1).formatted()) items")
@@ -192,14 +193,12 @@ struct StorageExplorerSidebar: View {
             }
             .frame(maxHeight: .infinity)
         } else {
-            ContentUnavailableView(
-                activeRoot == nil ? "Choose a location" : "Ready to scan",
+            SidebarIdleState(
+                title: activeRoot == nil ? "Choose a location" : "Ready to scan",
                 systemImage: activeRoot == nil ? "folder.badge.plus" : "play.circle",
-                description: Text(
-                    activeRoot == nil
-                        ? "Select the full Mac or a folder above."
-                        : "\(activeRoot?.displayName ?? "The selected location") is idle until you press Scan."
-                )
+                message: activeRoot == nil
+                    ? "Select the full Mac or a folder above."
+                    : "\(activeRoot?.displayName ?? "The selected location") is idle until you press Scan."
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, DiskVisualStyle.sidebarPadding)
@@ -208,9 +207,7 @@ struct StorageExplorerSidebar: View {
 
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: 4) {
-            CleanupSafetyControl(isEnabled: $cleanupControlsEnabled)
-
-            SidebarSettingsButton(action: openSettings)
+            SidebarSettingsButton(isShowingSettings: isShowingSettings, action: toggleSettings)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, DiskVisualStyle.sidebarPadding)
@@ -282,57 +279,46 @@ struct StorageExplorerSidebar: View {
     }
 }
 
-private struct CleanupSafetyControl: View {
-    @Binding var isEnabled: Bool
+/// A deliberately compact empty state. The system unavailable view carries a
+/// large intrinsic height that can evict fixed sidebar controls in short windows.
+private struct SidebarIdleState: View {
+    let title: String
+    let systemImage: String
+    let message: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: isEnabled ? "lock.open.fill" : "lock.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(isEnabled ? DiskVisualStyle.available : Color.secondary)
-                .frame(width: 28, height: 28)
-                .background(
-                    (isEnabled ? DiskVisualStyle.available : DiskVisualStyle.neutral).opacity(0.10),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                )
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Cleanup")
-                    .font(.subheadline.weight(.medium))
-                Text(isEnabled ? "Confirm every move" : "Locked by default")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            Toggle("Cleanup controls", isOn: $isEnabled)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(DiskVisualStyle.accent)
-                .accessibilityValue(isEnabled ? "Unlocked" : "Locked")
+        VStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 29, weight: .regular))
+                .foregroundStyle(DiskVisualStyle.accent)
+            Text(title)
+                .font(.title3.weight(.semibold))
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
         }
-        .padding(.horizontal, 10)
-        .frame(height: 46)
-        .animation(DiskVisualStyle.settleMotion, value: isEnabled)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
     }
 }
 
 private struct SidebarSettingsButton: View {
+    let isShowingSettings: Bool
     let action: () -> Void
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: "gearshape")
+                Image(systemName: isShowingSettings ? "chevron.left" : "gearshape")
                     .font(.system(size: 13, weight: .semibold))
                     .frame(width: 20)
-                Text("Settings")
+                Text(isShowingSettings ? "Back to storage" : "Settings")
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Image(systemName: "chevron.right")
+                Image(systemName: isShowingSettings ? "square.grid.3x3" : "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
@@ -344,7 +330,7 @@ private struct SidebarSettingsButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
         .onHover { isHovered = $0 }
-        .help("Open appearance, scanning, and cleanup settings")
+        .help(isShowingSettings ? "Return to the storage map" : "Open appearance, scanning, and deletion settings")
     }
 }
 
@@ -353,7 +339,7 @@ private struct SidebarScanActivity: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            ProgressView()
+            ProgressView(value: activity.fractionCompleted ?? 0)
                 .progressViewStyle(.linear)
                 .tint(DiskVisualStyle.accent)
 
@@ -364,8 +350,16 @@ private struct SidebarScanActivity: View {
                     .monospacedDigit()
                     .contentTransition(.numericText())
                 Spacer(minLength: 4)
-                if activity.itemsPerSecond > 1 {
+                if let percentage = activity.percentageText {
+                    Text(percentage)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                } else if activity.itemsPerSecond > 1 {
                     Text("\(Int(activity.itemsPerSecond).formatted())/s")
+                        .monospacedDigit()
+                } else {
+                    Text("0%")
+                        .fontWeight(.semibold)
                         .monospacedDigit()
                 }
             }

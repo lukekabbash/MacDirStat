@@ -21,41 +21,43 @@ enum AppDestination: String, CaseIterable {
     case settings
 }
 
-enum SettingsSection: String, CaseIterable, Identifiable {
-    case appearance
-    case scanning
-    case cleanup
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .appearance: return "Appearance"
-        case .scanning: return "Scanning"
-        case .cleanup: return "Cleanup"
-        }
-    }
-
-    var symbolName: String {
-        switch self {
-        case .appearance: return "circle.lefthalf.filled"
-        case .scanning: return "internaldrive"
-        case .cleanup: return "lock.shield"
-        }
-    }
-}
-
 struct ScanActivity: Equatable {
     let startedAt: Date
     var phase: ScanProgress.Phase
     var inspectedItems: Int
+    var inventoryItems: Int
     var currentPath: String
     var itemsPerSecond: Double
+    var totalItems: Int?
 
     var currentLocation: String {
         let url = URL(fileURLWithPath: currentPath)
         let name = url.lastPathComponent
         return name.isEmpty ? "Macintosh HD" : name
+    }
+
+    var fractionCompleted: Double? {
+        if phase == .preparingMap { return 1.0 }
+        if let totalItems, totalItems > 0 {
+            // Inventory is half of the deliberate work; measurement and map
+            // construction make up the second half.
+            let measuredFraction = min(1, max(0, Double(inspectedItems) / Double(totalItems)))
+            return min(0.995, 0.5 + measuredFraction * 0.5)
+        }
+
+        let observedWork = max(0, inspectedItems) + max(0, inventoryItems)
+        guard observedWork > 0 else { return 0 }
+        // Until inventory finishes there is no truthful denominator. Use a
+        // monotonic, capped estimate based only on work actually observed;
+        // the exact phase always begins beyond this ceiling.
+        let estimate = 0.48 * (1 - exp(-Double(observedWork) / 250_000))
+        return min(0.48, max(0.01, estimate))
+    }
+
+    var percentageText: String? {
+        guard let fractionCompleted else { return nil }
+        let value = fractionCompleted.formatted(.percent.precision(.fractionLength(0)))
+        return totalItems == nil && fractionCompleted > 0 ? "~\(value)" : value
     }
 }
 
@@ -125,7 +127,6 @@ final class AppModel: ObservableObject {
     }
     @Published var session: ScanSession?
     @Published var appDestination: AppDestination = .workspace
-    @Published var settingsSection: SettingsSection = .appearance
     @Published private(set) var sessionRevision = 0
     @Published var sizeMetric: SizeMetric = .allocated {
         didSet {
@@ -162,15 +163,24 @@ final class AppModel: ObservableObject {
     @Published private(set) var isPreparingMapLegend = false
     @Published private(set) var scannedNodeCount = 0
     let scanTelemetry = ScanTelemetryState()
-    @Published var showHiddenFiles = true
-    @Published var treatPackagesAsLeaves = true
+    @Published var showHiddenFiles = true {
+        didSet { UserDefaults.standard.set(showHiddenFiles, forKey: Self.showHiddenFilesKey) }
+    }
+    @Published var treatPackagesAsLeaves = true {
+        didSet { UserDefaults.standard.set(treatPackagesAsLeaves, forKey: Self.treatPackagesAsLeavesKey) }
+    }
+    @Published var calculatesExactProgress = true {
+        didSet { UserDefaults.standard.set(calculatesExactProgress, forKey: Self.exactProgressKey) }
+    }
     @Published var isScanning = false
     @Published var statusLine = "Choose a folder or volume to map."
     @Published private(set) var selectedNodeID: NodeID?
     @Published var focusedNodeID: NodeID = .root
     @Published var hoveredNodeID: NodeID?
     @Published var activeRoot: ScanRoot?
-    @Published var showFreeSpaceInMap = false
+    @Published var showFreeSpaceInMap = false {
+        didSet { UserDefaults.standard.set(showFreeSpaceInMap, forKey: Self.showFreeSpaceKey) }
+    }
     @Published private(set) var volumeSpace: VolumeSpaceSnapshot?
     @Published private(set) var cleanupControlsEnabled = false
     @Published var showOnboarding = !UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
@@ -190,14 +200,29 @@ final class AppModel: ObservableObject {
 
     private static let appearanceModeKey = "appearanceMode"
     private static let themeIDKey = "themeID"
+    private static let themeDefaultsVersionKey = "themeDefaultsVersion"
+    private static let showHiddenFilesKey = "showHiddenFiles"
+    private static let treatPackagesAsLeavesKey = "treatPackagesAsLeaves"
+    private static let exactProgressKey = "calculatesExactProgress"
+    private static let showFreeSpaceKey = "showFreeSpaceInMap"
 
     init() {
         appearanceMode = DiskAppearanceMode(
             rawValue: UserDefaults.standard.string(forKey: Self.appearanceModeKey) ?? ""
         ) ?? .system
-        themeID = DiskThemeID(
-            rawValue: UserDefaults.standard.string(forKey: Self.themeIDKey) ?? ""
-        ) ?? .integrator
+        let defaults = UserDefaults.standard
+        let storedTheme = DiskThemeID(rawValue: defaults.string(forKey: Self.themeIDKey) ?? "")
+        if defaults.integer(forKey: Self.themeDefaultsVersionKey) < 2 {
+            themeID = .softGlass
+            defaults.set(2, forKey: Self.themeDefaultsVersionKey)
+            defaults.set(DiskThemeID.softGlass.rawValue, forKey: Self.themeIDKey)
+        } else {
+            themeID = storedTheme ?? .softGlass
+        }
+        showHiddenFiles = Self.storedBool(Self.showHiddenFilesKey, default: true)
+        treatPackagesAsLeaves = Self.storedBool(Self.treatPackagesAsLeavesKey, default: true)
+        calculatesExactProgress = Self.storedBool(Self.exactProgressKey, default: true)
+        showFreeSpaceInMap = Self.storedBool(Self.showFreeSpaceKey, default: false)
 
         Task {
             try? await BookmarkStore.default.load()
@@ -223,6 +248,11 @@ final class AppModel: ObservableObject {
                 }
             }
         }
+    }
+
+    private static func storedBool(_ key: String, default defaultValue: Bool) -> Bool {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return defaultValue }
+        return UserDefaults.standard.bool(forKey: key)
     }
 
     func dismissOnboarding() {
@@ -252,11 +282,11 @@ final class AppModel: ObservableObject {
         panel.allowsMultipleSelection = false
         switch intent {
         case .folder:
-            panel.message = "Choose a folder to map. Cleanup remains locked until you enable it."
+            panel.message = "Choose a folder to map. Deletion remains disabled until you allow it in Settings."
             panel.prompt = "Map Folder"
         case .startupVolume:
             panel.directoryURL = URL(fileURLWithPath: "/", isDirectory: true)
-            panel.message = "Choose Macintosh HD once to map the startup volume. This grants read access; cleanup remains locked."
+            panel.message = "Choose Macintosh HD once to map the startup volume. This grants read access; deletion remains disabled."
             panel.prompt = "Map Full Mac"
         }
         guard panel.runModal() == .OK, let pickedURL = panel.url else { return }
@@ -331,7 +361,7 @@ final class AppModel: ObservableObject {
         statusLine = "\(root.displayName) is ready to scan"
     }
 
-    /// Cleanup is a presentation and intent lock. The selected-folder bookmark
+    /// File-change permission is a presentation and intent lock. The selected-folder bookmark
     /// already supplies the underlying read-write scope, so toggling it should
     /// never force an expensive filesystem rescan.
     func setCleanupControls(enabled: Bool) {
@@ -341,8 +371,8 @@ final class AppModel: ObservableObject {
         activeRoot = root
         Task { try? await BookmarkStore.default.upsert(root) }
         statusLine = enabled
-            ? "Cleanup unlocked · every move still requires confirmation"
-            : "Cleanup locked · snapshot unchanged"
+            ? "Deletion allowed · every deletion still requires confirmation"
+            : "Deletion disabled · snapshot unchanged"
     }
 
     func startScan() {
@@ -359,6 +389,7 @@ final class AppModel: ObservableObject {
         activeScanID = scanID
 
         let preservesCurrentSnapshot = session?.rootURLBookmarkID == root.id
+        dashboardMode = .map
         isScanning = true
         scannedNodeCount = 0
         let scanStartedAt = Date()
@@ -366,8 +397,10 @@ final class AppModel: ObservableObject {
             startedAt: scanStartedAt,
             phase: .discovering,
             inspectedItems: 0,
+            inventoryItems: 0,
             currentPath: urlPathPlaceholder(for: root),
-            itemsPerSecond: 0
+            itemsPerSecond: 0,
+            totalItems: nil
         )
         lastProgressSampleTime = Date.timeIntervalSinceReferenceDate
         lastProgressSampleCount = 0
@@ -407,7 +440,8 @@ final class AppModel: ObservableObject {
         let options = ScanOptions(
             metric: sizeMetric,
             showHiddenFiles: showHiddenFiles,
-            treatPackagesAsLeaves: treatPackagesAsLeaves
+            treatPackagesAsLeaves: treatPackagesAsLeaves,
+            calculatesExactProgress: calculatesExactProgress
         )
 
         let engine = self.engine
@@ -418,7 +452,7 @@ final class AppModel: ObservableObject {
                     rootURL: url,
                     rootBookmarkID: root.id,
                     options: options,
-                    // The cleanup lock, not the scanner, controls whether
+                    // The file-change lock, not the scanner, controls whether
                     // mutation is offered to the user.
                     writeAccess: true,
                     progress: { [weak self] progress in
@@ -437,12 +471,14 @@ final class AppModel: ObservableObject {
                                 startedAt: scanStartedAt,
                                 phase: progress.phase,
                                 inspectedItems: progress.scannedNodes,
+                                inventoryItems: progress.inventoryNodes,
                                 currentPath: progress.currentPath,
-                                itemsPerSecond: smoothedRate
+                                itemsPerSecond: smoothedRate,
+                                totalItems: progress.totalNodes
                             )
                             self.lastProgressSampleTime = now
                             self.lastProgressSampleCount = progress.scannedNodes
-                            if !preservesCurrentSnapshot, let partialSession = progress.partialSession {
+                            if let partialSession = progress.partialSession {
                                 self.publishSession(partialSession)
                             }
                         }
@@ -456,8 +492,13 @@ final class AppModel: ObservableObject {
                     guard let self, self.activeScanID == scanID else { return }
                     self.publishSession(final)
                     self.isScanning = false
-                    self.scanTelemetry.activity = nil
                     self.scannedNodeCount = max(0, final.nodes.count - 1)
+                    self.holdCompletedScanActivity(
+                        scanID: scanID,
+                        startedAt: scanStartedAt,
+                        finalCount: self.scannedNodeCount,
+                        currentPath: url.path
+                    )
                     self.scanTask = nil
                     self.activeCancellationState = nil
                     self.overviewCache.removeAll(keepingCapacity: true)
@@ -498,6 +539,35 @@ final class AppModel: ObservableObject {
         }
     }
 
+    private func holdCompletedScanActivity(
+        scanID: UUID,
+        startedAt: Date,
+        finalCount: Int,
+        currentPath: String
+    ) {
+        let previousActivity = scanTelemetry.activity
+        let completedCount = max(finalCount, previousActivity?.totalItems ?? 0)
+        scanTelemetry.activity = ScanActivity(
+            startedAt: startedAt,
+            phase: .preparingMap,
+            inspectedItems: completedCount,
+            inventoryItems: completedCount,
+            currentPath: currentPath,
+            itemsPerSecond: previousActivity?.itemsPerSecond ?? 0,
+            totalItems: completedCount
+        )
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            guard let self,
+                  self.activeScanID == scanID,
+                  !self.isScanning,
+                  self.scanTelemetry.activity?.phase == .preparingMap
+            else { return }
+            self.scanTelemetry.activity = nil
+        }
+    }
+
     func cancelActiveScan() {
         guard isScanning else { return }
         activeCancellationState?.cancel()
@@ -520,8 +590,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func openSettings(_ section: SettingsSection = .appearance) {
-        settingsSection = section
+    func openSettings() {
         appDestination = .settings
     }
 

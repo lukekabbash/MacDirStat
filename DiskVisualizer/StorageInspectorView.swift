@@ -144,10 +144,10 @@ struct StorageInspectorView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Label("Cleanup controls are locked", systemImage: "lock.fill")
+                Label("Deletion is disabled", systemImage: "lock.fill")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text("Enable them at the bottom of the sidebar to move this item or send it to Trash.")
+                Text("Allow deletion in Settings to move this item or send it to Trash.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

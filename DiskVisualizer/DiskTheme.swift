@@ -33,89 +33,65 @@ enum DiskAppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
-/// Appearance and palette are independent. A palette owns semantic roles, so
-/// future themes never need to know which screen or component consumes them.
+/// A theme owns semantic roles rather than screen-specific colors. New
+/// palettes can therefore change the whole app without component exceptions.
 enum DiskThemeID: String, CaseIterable, Identifiable {
+    case softGlass
     case integrator
     case graphite
-    case softGlass
+    case ash
+    case midnight
+    case ocean
+    case forest
+    case dusk
+    case paper
+    case iris
+    case porcelain
+    case sage
+    case highContrast
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
+        case .softGlass: return "Soft Glass"
         case .integrator: return "Integrator"
         case .graphite: return "Graphite"
-        case .softGlass: return "Soft Glass"
+        case .ash: return "Ash"
+        case .midnight: return "Midnight"
+        case .ocean: return "Ocean"
+        case .forest: return "Forest"
+        case .dusk: return "Dusk"
+        case .paper: return "Paper"
+        case .iris: return "Iris"
+        case .porcelain: return "Porcelain"
+        case .sage: return "Sage"
+        case .highContrast: return "High Contrast"
         }
     }
 
     var description: String {
         switch self {
-        case .integrator: return "Black, graphite, and silver. The data carries the color."
-        case .graphite: return "Neutral mineral surfaces with a restrained steel-blue signal."
-        case .softGlass: return "A quieter version of the icon palette: slate, mint, and lilac."
+        case .softGlass: return "Slate, mint, and lilac with quiet translucent depth."
+        case .integrator: return "Pure black, white, graphite, and silver."
+        case .graphite: return "Near-black mineral surfaces with a steel-blue signal."
+        case .ash: return "Pale mineral gray with quiet ink and lake-blue controls."
+        case .midnight: return "Inky blue-black depth with glacial-blue interaction."
+        case .ocean: return "Deep marine surfaces with a crisp cyan current."
+        case .forest: return "Evergreen charcoal with moss and fern accents."
+        case .dusk: return "Twilight plum-gray warmed by a restrained apricot."
+        case .paper: return "Warm ivory, graphite ink, and editorial blue."
+        case .iris: return "Charcoal-violet depth with soft amethyst emphasis."
+        case .porcelain: return "White porcelain, ink text, and graphite controls."
+        case .sage: return "Fresh pale greens with grounded herbal accents."
+        case .highContrast: return "Maximum separation and explicit focus."
         }
     }
 
-    fileprivate var definition: DiskThemeDefinition {
-        switch self {
-        case .integrator:
-            return DiskThemeDefinition(
-                light: .init(
-                    accent: 0x42464B, accentStrong: 0x24272A,
-                    available: 0x688071, attention: 0x8A7553, neutral: 0x777A7D,
-                    canvas: 0xF5F5F2, rail: 0xECEDE9, panel: 0xFAFAF8,
-                    layer: 0xFFFFFF, inspector: 0xF0F0ED,
-                    border: 0xD9DAD6, borderStrong: 0xB9BBB7, danger: 0xA5544F
-                ),
-                dark: .init(
-                    accent: 0xE6E6E6, accentStrong: 0xFFFFFF,
-                    available: 0x98B6A2, attention: 0xCFAE72, neutral: 0xA3A3A3,
-                    canvas: 0x050505, rail: 0x0E0E0E, panel: 0x131313,
-                    layer: 0x1B1B1B, inspector: 0x101010,
-                    border: 0x262626, borderStrong: 0x4A4A4A, danger: 0xD68983
-                )
-            )
-        case .graphite:
-            return DiskThemeDefinition(
-                light: .init(
-                    accent: 0x547A98, accentStrong: 0x365F7E,
-                    available: 0x5F8B79, attention: 0x9A7750, neutral: 0x737B82,
-                    canvas: 0xF3F5F6, rail: 0xE8ECEE, panel: 0xFAFBFB,
-                    layer: 0xFFFFFF, inspector: 0xEDF0F2,
-                    border: 0xD2D8DC, borderStrong: 0xAAB4BB, danger: 0xAD554F
-                ),
-                dark: .init(
-                    accent: 0x72A7D1, accentStrong: 0xA7CCE7,
-                    available: 0x70B58A, attention: 0xD5A956, neutral: 0x8B969E,
-                    canvas: 0x111315, rail: 0x16191C, panel: 0x1A1D21,
-                    layer: 0x23282D, inspector: 0x15181B,
-                    border: 0x2A3035, borderStrong: 0x46515A, danger: 0xDC7771
-                )
-            )
-        case .softGlass:
-            return DiskThemeDefinition(
-                light: .init(
-                    accent: 0x627C9D, accentStrong: 0x496887,
-                    available: 0x4F8F82, attention: 0x806994, neutral: 0x74777E,
-                    canvas: 0xF4F4F2, rail: 0xECEDEB, panel: 0xFBFBFA,
-                    layer: 0xFFFFFF, inspector: 0xEFF0EE,
-                    border: 0xD5D7D8, borderStrong: 0xAEB4B8, danger: 0xA9514C
-                ),
-                dark: .init(
-                    accent: 0x9BB8DC, accentStrong: 0xB1C9E5,
-                    available: 0x7CC8B6, attention: 0xBEA0D5, neutral: 0xA9ADB5,
-                    canvas: 0x17191C, rail: 0x202225, panel: 0x292C30,
-                    layer: 0x31343A, inspector: 0x1C1E21,
-                    border: 0x3E4248, borderStrong: 0x626974, danger: 0xD17D78
-                )
-            )
-        }
-    }
+    var definition: DiskThemeDefinition { DiskThemeCatalog.definition(for: self) }
 }
 
-private struct DiskThemeVariant {
+struct DiskThemeVariant {
     let accent: UInt32
     let accentStrong: UInt32
     let available: UInt32
@@ -131,14 +107,11 @@ private struct DiskThemeVariant {
     let danger: UInt32
 }
 
-private struct DiskThemeDefinition {
+struct DiskThemeDefinition {
     let light: DiskThemeVariant
     let dark: DiskThemeVariant
 }
 
-/// Semantic tokens shared by chrome and content. The active theme is resolved
-/// lazily by AppKit's appearance provider; changing theme rebuilds the root
-/// view, while changing light/dark mode does not require new token objects.
 enum DiskVisualStyle {
     private enum Role {
         case accent, accentStrong, available, attention, neutral, danger
@@ -152,7 +125,6 @@ enum DiskVisualStyle {
     static var attention: Color { themed(.attention) }
     static var neutral: Color { themed(.neutral) }
     static var danger: Color { themed(.danger) }
-
     static var canvas: Color { themed(.canvas) }
     static var sidebar: Color { themed(.sidebar) }
     static var contentSurface: Color { themed(.contentSurface) }
@@ -182,7 +154,7 @@ enum DiskVisualStyle {
 
     static func previewColors(for theme: DiskThemeID, dark: Bool) -> [Color] {
         let variant = dark ? theme.definition.dark : theme.definition.light
-        return [variant.canvas, variant.rail, variant.accent, variant.available, variant.attention]
+        return [variant.canvas, variant.rail, variant.panel, variant.accent, variant.available]
             .map { Color(nsColor: nsColor(hex: $0)) }
     }
 
@@ -190,7 +162,7 @@ enum DiskVisualStyle {
         Color(nsColor: NSColor(name: nil) { appearance in
             let themeID = DiskThemeID(
                 rawValue: UserDefaults.standard.string(forKey: "themeID") ?? ""
-            ) ?? .integrator
+            ) ?? .softGlass
             let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             let variant = isDark ? themeID.definition.dark : themeID.definition.light
             let value: UInt32

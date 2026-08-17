@@ -2,6 +2,7 @@ import Foundation
 
 public struct ScanProgress: Sendable {
     public enum Phase: String, Sendable {
+        case indexing
         case discovering
         case measuringPackage
         case preparingMap
@@ -10,6 +11,10 @@ public struct ScanProgress: Sendable {
     public var scannedNodes: Int
     public var currentPath: String
     public var phase: Phase
+    public var totalNodes: Int?
+    /// Lightweight inventory work completed beside measurement. It lets the
+    /// UI show honest forward motion before the final denominator is known.
+    public var inventoryNodes: Int
     /// Present only at deliberate visual checkpoints. Most progress updates
     /// stay lightweight so a large arena is not copied just to update a count.
     public var partialSession: ScanSession?
@@ -18,11 +23,15 @@ public struct ScanProgress: Sendable {
         scannedNodes: Int,
         currentPath: String,
         phase: Phase = .discovering,
+        totalNodes: Int? = nil,
+        inventoryNodes: Int = 0,
         partialSession: ScanSession? = nil
     ) {
         self.scannedNodes = scannedNodes
         self.currentPath = currentPath
         self.phase = phase
+        self.totalNodes = totalNodes
+        self.inventoryNodes = inventoryNodes
         self.partialSession = partialSession
     }
 }
@@ -41,6 +50,37 @@ public enum ScanError: LocalizedError, Sendable {
 
 /// Background filesystem scanner: no symlinks followed, packages optional leaf.
 public final class ScanEngine: @unchecked Sendable {
+    private final class ExactProgressState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storedTotal: Int?
+        private var storedInventory = 0
+
+        var total: Int? {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedTotal
+        }
+
+        var inventory: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return storedInventory
+        }
+
+        func recordInventory(_ count: Int) {
+            lock.lock()
+            storedInventory = max(storedInventory, count)
+            lock.unlock()
+        }
+
+        func finish(with total: Int?) {
+            lock.lock()
+            storedTotal = total
+            if let total { storedInventory = max(storedInventory, total) }
+            lock.unlock()
+        }
+    }
+
     private struct AddedEntry {
         let directoryID: NodeID?
         let inspectedDelta: Int
@@ -109,6 +149,25 @@ public final class ScanEngine: @unchecked Sendable {
 
         var warnings: [String] = []
         var scanned = 0
+        let exactProgress = ExactProgressState()
+        let countGroup = DispatchGroup()
+        if options.calculatesExactProgress {
+            countGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                defer { countGroup.leave() }
+                let total = try? self.countScanUnits(
+                    rootURL: rootURL,
+                    rootPath: rootPath,
+                    options: options,
+                    onProgress: { count in exactProgress.recordInventory(count) },
+                    shouldCancel: shouldCancel
+                )
+                exactProgress.finish(with: total)
+            }
+        }
+        defer {
+            if options.calculatesExactProgress { countGroup.wait() }
+        }
         var lastProgressNodeCount = 0
         var lastProgressTime = Date.timeIntervalSinceReferenceDate
         var lastPartialSnapshotNodeCount = 0
@@ -126,6 +185,8 @@ public final class ScanEngine: @unchecked Sendable {
             rootBookmarkID: rootBookmarkID,
             rootName: rootName,
             rootPath: rootPath,
+            totalNodes: { exactProgress.total },
+            inventoryNodes: { exactProgress.inventory },
             progress: progress,
             shouldCancel: shouldCancel,
         )
@@ -133,6 +194,9 @@ public final class ScanEngine: @unchecked Sendable {
         if shouldCancel?() == true {
             throw ScanError.cancelled
         }
+
+        if options.calculatesExactProgress { countGroup.wait() }
+        let totalNodes = exactProgress.total
 
         return makeSnapshot(
             arena: &arena,
@@ -142,9 +206,43 @@ public final class ScanEngine: @unchecked Sendable {
             options: options,
             warnings: warnings,
             scanned: scanned,
+            totalNodes: totalNodes,
             isComplete: true,
             progress: progress
         )
+    }
+
+    /// Filesystem APIs do not expose a recursive item total. This lightweight
+    /// inventory runs beside measurement so the map can grow immediately while
+    /// the visible percentage acquires a real denominator.
+    private func countScanUnits(
+        rootURL: URL,
+        rootPath: String,
+        options: ScanOptions,
+        onProgress: @Sendable (Int) -> Void,
+        shouldCancel: (@Sendable () -> Bool)?
+    ) throws -> Int {
+        var enumerationOptions: FileManager.DirectoryEnumerationOptions = []
+        if !options.showHiddenFiles { enumerationOptions.insert(.skipsHiddenFiles) }
+        guard let enumerator = FileManager.default.enumerator(
+            at: rootURL,
+            includingPropertiesForKeys: nil,
+            options: enumerationOptions,
+            errorHandler: { _, _ in true }
+        ) else { return 0 }
+
+        var count = 0
+        for case let url as URL in enumerator {
+            if shouldCancel?() == true { throw ScanError.cancelled }
+            if Self.shouldSkipNonContentPath(path: url.path, rootPath: rootPath) {
+                enumerator.skipDescendants()
+                continue
+            }
+            count += 1
+            if count.isMultiple(of: 2_048) { onProgress(count) }
+        }
+        onProgress(count)
+        return count
     }
 
     /// Full-volume traversal lists only privacy-sensitive boundaries manually;
@@ -162,6 +260,8 @@ public final class ScanEngine: @unchecked Sendable {
         rootBookmarkID: UUID?,
         rootName: String,
         rootPath: String,
+        totalNodes: @escaping @Sendable () -> Int?,
+        inventoryNodes: @escaping @Sendable () -> Int,
         progress: (@Sendable (ScanProgress) -> Void)?,
         shouldCancel: (@Sendable () -> Bool)?
     ) throws {
@@ -180,6 +280,8 @@ public final class ScanEngine: @unchecked Sendable {
                 rootName: rootName,
                 currentPath: url.path,
                 options: options,
+                totalNodes: totalNodes,
+                inventoryNodes: inventoryNodes,
                 progress: progress
             )
         }
@@ -187,10 +289,10 @@ public final class ScanEngine: @unchecked Sendable {
         func addEntry(_ url: URL, to parentID: NodeID) throws -> AddedEntry {
             guard let values = try? url.resourceValues(forKeys: Self.resourceKeySet) else {
                 Self.recordWarning("Could not inspect \(url.path).", in: &warnings)
-                return AddedEntry(directoryID: nil, inspectedDelta: 0, skipDescendants: true)
+                return AddedEntry(directoryID: nil, inspectedDelta: 1, skipDescendants: true)
             }
             if values.isSymbolicLink == true {
-                return AddedEntry(directoryID: nil, inspectedDelta: 0, skipDescendants: true)
+                return AddedEntry(directoryID: nil, inspectedDelta: 1, skipDescendants: true)
             }
 
             let isDirectory = values.isDirectory == true
@@ -206,6 +308,8 @@ public final class ScanEngine: @unchecked Sendable {
                     at: url,
                     options: options,
                     scannedBase: scanned,
+                    totalNodes: totalNodes,
+                    inventoryNodes: inventoryNodes,
                     progress: progress,
                     shouldCancel: shouldCancel
                 )
@@ -224,7 +328,7 @@ public final class ScanEngine: @unchecked Sendable {
                 )
                 return AddedEntry(
                     directoryID: nil,
-                    inspectedDelta: max(1, usage.inspectedItems),
+                    inspectedDelta: 1 + usage.inspectedItems,
                     skipDescendants: true
                 )
             }
@@ -413,6 +517,8 @@ public final class ScanEngine: @unchecked Sendable {
         at packageURL: URL,
         options: ScanOptions,
         scannedBase: Int,
+        totalNodes: @escaping @Sendable () -> Int?,
+        inventoryNodes: @escaping @Sendable () -> Int,
         progress: (@Sendable (ScanProgress) -> Void)?,
         shouldCancel: (@Sendable () -> Bool)?
     ) throws -> (logical: UInt64, allocated: UInt64, inspectedItems: Int) {
@@ -440,9 +546,11 @@ public final class ScanEngine: @unchecked Sendable {
             if now - lastProgressTime >= 1.0 {
                 lastProgressTime = now
                 progress?(ScanProgress(
-                    scannedNodes: scannedBase + inspectedItems,
+                    scannedNodes: scannedBase + 1 + inspectedItems,
                     currentPath: packageURL.path,
-                    phase: .measuringPackage
+                    phase: .measuringPackage,
+                    totalNodes: totalNodes(),
+                    inventoryNodes: inventoryNodes()
                 ))
             }
             guard let values = try? childURL.resourceValues(forKeys: Self.resourceKeySet) else { continue }
@@ -471,6 +579,8 @@ public final class ScanEngine: @unchecked Sendable {
         rootName: String,
         currentPath: String,
         options: ScanOptions,
+        totalNodes: @Sendable () -> Int?,
+        inventoryNodes: @Sendable () -> Int,
         progress: (@Sendable (ScanProgress) -> Void)?
     ) {
         guard let progress else { return }
@@ -502,6 +612,8 @@ public final class ScanEngine: @unchecked Sendable {
         progress(ScanProgress(
             scannedNodes: scanned,
             currentPath: currentPath,
+            totalNodes: totalNodes(),
+            inventoryNodes: inventoryNodes(),
             partialSession: partialSession
         ))
     }
@@ -511,9 +623,13 @@ public final class ScanEngine: @unchecked Sendable {
     /// so multi-million-node scans keep the interface responsive.
     private func partialSnapshotInterval(for scanned: Int) -> Int {
         switch scanned {
-        case ..<60_000:
+        case ..<5_000:
+            return 1_000
+        case ..<25_000:
+            return 5_000
+        case ..<100_000:
             return 20_000
-        case ..<300_000:
+        case ..<500_000:
             return 100_000
         default:
             return 500_000
@@ -529,13 +645,15 @@ public final class ScanEngine: @unchecked Sendable {
         options: ScanOptions,
         warnings: [String],
         scanned: Int,
+        totalNodes: Int?,
         isComplete: Bool,
         progress: (@Sendable (ScanProgress) -> Void)?
     ) -> ScanSession {
         progress?(ScanProgress(
-            scannedNodes: scanned,
+            scannedNodes: max(scanned, totalNodes ?? 0),
             currentPath: rootPath,
-            phase: .preparingMap
+            phase: .preparingMap,
+            totalNodes: max(scanned, totalNodes ?? 0)
         ))
         arena.aggregateTotals()
         let snapshot = arena.makeSnapshot(

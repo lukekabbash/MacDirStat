@@ -14,14 +14,18 @@ struct ContentView: View {
     @State private var pendingMove: MoveRequest?
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             sidebar
-            .navigationSplitViewColumnWidth(min: 276, ideal: 292, max: 324)
-        } detail: {
+                .frame(width: 292)
+
+            Rectangle()
+                .fill(DiskVisualStyle.hairline)
+                .frame(width: 1)
+
             destinationCanvas
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 1_180, minHeight: 720)
+        .frame(minWidth: 1_120, minHeight: 680)
         .tint(DiskVisualStyle.accent)
         .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: model.appDestination)
         .toolbar { toolbar }
@@ -52,28 +56,23 @@ struct ContentView: View {
 
     @ViewBuilder
     private var sidebar: some View {
-        if model.appDestination == .settings {
-            SettingsNavigationSidebar(
-                selection: $model.settingsSection,
-                close: model.closeSettings
-            )
-        } else {
-            StorageExplorerSidebar(
-                session: model.session,
-                activeRoot: model.activeRoot,
-                focusNodeID: model.focusedNodeID,
-                isScanning: model.isScanning,
-                scanTelemetry: model.scanTelemetry,
-                selectedNodeID: selectedNodeBinding,
-                metric: $model.sizeMetric,
-                cleanupControlsEnabled: cleanupControlsBinding,
-                chooseFullMac: model.pickFullMac,
-                chooseFolder: model.pickFolder,
-                startScan: model.startScan,
-                cancelScan: model.cancelActiveScan,
-                openSettings: { model.openSettings(.appearance) }
-            )
-        }
+        StorageExplorerSidebar(
+            session: model.session,
+            activeRoot: model.activeRoot,
+            focusNodeID: model.focusedNodeID,
+            isScanning: model.isScanning,
+            scanTelemetry: model.scanTelemetry,
+            selectedNodeID: selectedNodeBinding,
+            metric: $model.sizeMetric,
+            isShowingSettings: model.appDestination == .settings,
+            chooseFullMac: model.pickFullMac,
+            chooseFolder: model.pickFolder,
+            startScan: model.startScan,
+            cancelScan: model.cancelActiveScan,
+            toggleSettings: {
+                model.appDestination == .settings ? model.closeSettings() : model.openSettings()
+            }
+        )
     }
 
     @ViewBuilder
@@ -87,13 +86,6 @@ struct ContentView: View {
         }
     }
 
-    private var cleanupControlsBinding: Binding<Bool> {
-        Binding(
-            get: { model.cleanupControlsEnabled },
-            set: { model.setCleanupControls(enabled: $0) }
-        )
-    }
-
     private var selectedNodeBinding: Binding<NodeID?> {
         Binding(
             get: { model.selectedNodeID },
@@ -104,38 +96,11 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            if model.appDestination == .settings {
-                Button("Storage", systemImage: "square.grid.3x3") {
-                    model.closeSettings()
-                }
-                .help("Return to the storage workspace")
-            } else {
-                Menu("Scan", systemImage: "internaldrive") {
-                    Button("Full Mac…", systemImage: "desktopcomputer", action: model.pickFullMac)
-                    Button("Choose Folder…", systemImage: "folder.badge.plus", action: model.pickFolder)
-                }
-
-                if model.isScanning {
-                    Button("Stop", systemImage: "stop.fill", action: model.cancelActiveScan)
-                        .help("Stop refreshing and keep the last available snapshot")
-                } else {
-                    Button(
-                        model.session == nil ? "Scan" : "Refresh",
-                        systemImage: model.session == nil ? "play.fill" : "arrow.clockwise",
-                        action: model.startScan
-                    )
-                    .disabled(model.activeRoot == nil)
-                }
-
+            if model.appDestination == .workspace, model.session != nil {
                 Button("Zoom Out", systemImage: "arrow.up.left.and.arrow.down.right") {
                     treemapBridge.zoomOut()
                 }
                 .disabled(model.dashboardMode != .map || breadcrumb.count < 2)
-
-                Button("Settings", systemImage: "gearshape") {
-                    model.openSettings(.appearance)
-                }
-                .help("Open app settings")
             }
         }
     }
@@ -166,9 +131,9 @@ struct ContentView: View {
         } else {
             EmptyDiskDashboard(
                 selectedRootName: model.activeRoot?.displayName,
-                startScan: model.startScan,
-                chooseFullMac: model.pickFullMac,
-                chooseFolder: model.pickFolder
+                metric: model.sizeMetric,
+                includesHiddenItems: model.showHiddenFiles,
+                groupsAppBundles: model.treatPackagesAsLeaves
             )
         }
     }
@@ -368,25 +333,39 @@ private struct MapLegendStrip: View {
 
     var body: some View {
         HStack(spacing: 9) {
+            Menu {
+                ForEach(TreemapColorMode.allCases, id: \.self) { option in
+                    Button {
+                        mode = option
+                    } label: {
+                        if mode == option {
+                            Label(option.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(option.displayName)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Color: \(mode.displayName)")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("Choose how map color is assigned")
+
             Button {
                 showsCapacity.toggle()
             } label: {
-                Image(systemName: "square.dashed")
-                    .frame(width: 16, height: 16)
+                Label("Capacity", systemImage: "square.dashed")
             }
             .buttonStyle(DiskGelButtonStyle(isSelected: showsCapacity))
             .disabled(!canShowCapacity)
             .help("Include free space and use outside this scan in the map")
-
-            Picker("Color by", selection: $mode) {
-                ForEach(TreemapColorMode.allCases, id: \.self) { option in
-                    Text(option.displayName).tag(option)
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(width: 154)
-            .help("Color blocks by file type or top-level location")
 
             if isPreparing && items.isEmpty {
                 ProgressView()
@@ -441,26 +420,25 @@ private struct FirstScanView: View {
     let cancel: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
-            ScanningMark()
-                .frame(width: 36, height: 36)
-            VStack(spacing: 5) {
+        VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text("Mapping \(rootName)")
-                    .font(.title2.weight(.semibold))
-                Text("\((scanTelemetry.activity?.inspectedItems ?? 0).formatted()) items checked. The map will appear as soon as a useful snapshot is ready.")
+                    .font(.system(size: 27, weight: .semibold))
+                    .tracking(-0.4)
+                Text("The first useful snapshot will appear while the scan continues.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
             if let activity = scanTelemetry.activity {
                 ScanActivityDetails(activity: activity)
-                    .frame(maxWidth: 520)
+                    .frame(maxWidth: 620)
             }
             Button("Stop", action: cancel)
                 .buttonStyle(.bordered)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: 620, alignment: .leading)
         .padding(48)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(DiskVisualStyle.canvas)
     }
 }
@@ -470,22 +448,22 @@ struct OnboardingView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Image(systemName: "square.grid.3x3.square")
-                .font(.system(size: 36, weight: .regular))
-                .foregroundStyle(.tint)
-                .symbolRenderingMode(.hierarchical)
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 42, height: 42)
 
             VStack(alignment: .leading, spacing: 7) {
                 Text("See your storage clearly")
                     .font(.largeTitle.weight(.semibold))
-                Text("Map any folder or volume, compare what is actually on disk, and act only when you choose to unlock cleanup.")
+                Text("Map any folder or volume, compare what is actually on disk, and allow deletion only when you need it.")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             VStack(alignment: .leading, spacing: 12) {
-                OnboardingPoint(icon: "eye", title: "Browse first", detail: "Cleanup controls start locked.")
+                OnboardingPoint(icon: "eye", title: "Browse first", detail: "Deletion starts disabled.")
                 OnboardingPoint(icon: "square.grid.3x3.square", title: "See hierarchy", detail: "Size, type, and location stay visible together.")
                 OnboardingPoint(icon: "trash", title: "Confirm every change", detail: "Moves and Trash actions never happen silently.")
             }

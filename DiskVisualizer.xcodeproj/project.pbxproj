@@ -20,6 +20,7 @@
 		A1000001000000000000000B /* VolumeSpaceContextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000C /* VolumeSpaceContextView.swift */; };
 		A1000001000000000000000C /* DiskTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000D /* DiskTheme.swift */; };
 		A1000001000000000000000D /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000E /* AppearanceSettingsView.swift */; };
+		A1000001000000000000000E /* DiskThemePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000F /* DiskThemePresets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		A1000002000000000000000C /* VolumeSpaceContextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSpaceContextView.swift; sourceTree = "<group>"; };
 		A1000002000000000000000D /* DiskTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskTheme.swift; sourceTree = "<group>"; };
 		A1000002000000000000000E /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
+		A1000002000000000000000F /* DiskThemePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskThemePresets.swift; sourceTree = "<group>"; };
 		A10000020000000000000004 /* DiskVisualizer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DiskVisualizer.entitlements; sourceTree = "<group>"; };
 		A10000030000000000000001 /* DiskVisualizer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DiskVisualizer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -73,6 +75,7 @@
 				A1000002000000000000000B /* StorageGroupInspectorView.swift */,
 				A1000002000000000000000C /* VolumeSpaceContextView.swift */,
 				A1000002000000000000000D /* DiskTheme.swift */,
+				A1000002000000000000000F /* DiskThemePresets.swift */,
 				A1000002000000000000000E /* AppearanceSettingsView.swift */,
 				A1000002000000000000000A /* Assets.xcassets */,
 				A10000020000000000000004 /* DiskVisualizer.entitlements */,
@@ -175,6 +178,7 @@
 				A1000001000000000000000A /* StorageGroupInspectorView.swift in Sources */,
 				A1000001000000000000000B /* VolumeSpaceContextView.swift in Sources */,
 				A1000001000000000000000C /* DiskTheme.swift in Sources */,
+				A1000001000000000000000E /* DiskThemePresets.swift in Sources */,
 				A1000001000000000000000D /* AppearanceSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
