@@ -29,7 +29,11 @@ struct DiskVisualizerApp: App {
                 Divider()
                 Button("Add to Review") { model.addSelectedNodeToReview() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
-                    .disabled(model.appDestination != .scan || model.selectedNodeID == nil)
+                    .disabled(
+                        model.appDestination != .scan
+                            || model.selectedNodeID == nil
+                            || model.presentedSnapshotActionsAreDisabled
+                    )
             }
         }
     }

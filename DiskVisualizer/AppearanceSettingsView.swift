@@ -40,7 +40,7 @@ private struct SettingsPageHeader: View {
                     .foregroundStyle(.secondary)
             }
             Spacer(minLength: 20)
-            ThemedAppMark(theme: model.themeID, size: 36)
+            ThemedAppIcon(theme: model.themeID, size: 36)
                 .contentTransition(.opacity)
                 .accessibilityHidden(true)
         }
@@ -286,6 +286,7 @@ private struct InlineChoice<Item: Hashable>: View {
                         .foregroundStyle(selection == item ? DiskVisualStyle.interactionStrong : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 27)
+                        .contentShape(Rectangle())
                         .background {
                             if selection == item {
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -319,8 +320,20 @@ private struct ThemeChoiceCard: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                ThemeSwatch(theme: theme, dark: theme.previewIsDark)
-                    .frame(width: 50, height: 34)
+                ZStack(alignment: .bottomTrailing) {
+                    ThemedAppIcon(theme: theme, size: 42)
+                        .accessibilityHidden(true)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 11, weight: .bold))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(DiskVisualStyle.iconAccent, DiskVisualStyle.raisedSurface)
+                            .offset(x: 1, y: 1)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(width: 44, height: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(theme.displayName)
@@ -332,20 +345,6 @@ private struct ThemeChoiceCard: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                ZStack(alignment: .bottomTrailing) {
-                    ThemedAppMark(theme: theme, dark: theme.previewIsDark, size: 24)
-                        .accessibilityHidden(true)
-
-                    if isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .symbolRenderingMode(.palette)
-                            .foregroundStyle(DiskVisualStyle.iconAccent, DiskVisualStyle.raisedSurface)
-                            .offset(x: 2, y: 2)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .frame(width: 26, height: 26)
             }
             .padding(.horizontal, 8)
             .frame(height: 52)
@@ -369,40 +368,5 @@ private struct ThemeChoiceCard: View {
         .accessibilityLabel("\(theme.displayName) theme")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
         .accessibilityHint("Applies this theme to the workspace")
-    }
-}
-
-private struct ThemeSwatch: View {
-    let theme: DiskThemeID
-    let dark: Bool
-
-    var body: some View {
-        let palette = DiskVisualStyle.previewPalette(for: theme, dark: dark)
-        ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(palette.canvas)
-            Rectangle()
-                .fill(palette.rail)
-                .frame(width: 14)
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(palette.panel)
-                .padding(.leading, 19)
-                .padding(.trailing, 5)
-                .padding(.vertical, 5)
-            Capsule()
-                .fill(palette.interactionAccent)
-                .frame(width: 15, height: 3)
-                .offset(x: 29, y: 9)
-            Circle()
-                .fill(palette.controlAccent)
-                .frame(width: 5, height: 5)
-                .offset(x: 22, y: -8)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(palette.border, lineWidth: 1)
-        }
-        .accessibilityHidden(true)
     }
 }

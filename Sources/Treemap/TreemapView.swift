@@ -17,6 +17,7 @@ public struct TreemapView: NSViewRepresentable {
     public var onZoomChange: (NodeID) -> Void
     public var onBreadcrumbChange: ([NodeID]) -> Void
     public var onHoverChange: (NodeID?) -> Void
+    public var contextMenuProvider: ((NodeID) -> NSMenu?)?
 
     public init(
         session: Binding<ScanSession?>,
@@ -32,7 +33,8 @@ public struct TreemapView: NSViewRepresentable {
         onSelectionChange: @escaping (NodeID?) -> Void = { _ in },
         onZoomChange: @escaping (NodeID) -> Void = { _ in },
         onBreadcrumbChange: @escaping ([NodeID]) -> Void = { _ in },
-        onHoverChange: @escaping (NodeID?) -> Void = { _ in }
+        onHoverChange: @escaping (NodeID?) -> Void = { _ in },
+        contextMenuProvider: ((NodeID) -> NSMenu?)? = nil
     ) {
         _session = session
         self.sessionRevision = sessionRevision
@@ -48,6 +50,7 @@ public struct TreemapView: NSViewRepresentable {
         self.onZoomChange = onZoomChange
         self.onBreadcrumbChange = onBreadcrumbChange
         self.onHoverChange = onHoverChange
+        self.contextMenuProvider = contextMenuProvider
     }
 
     public func makeNSView(context: Context) -> TreemapNSView {
@@ -65,6 +68,7 @@ public struct TreemapView: NSViewRepresentable {
         v.onZoomChange = onZoomChange
         v.onBreadcrumbChange = onBreadcrumbChange
         v.onHoverChange = onHoverChange
+        v.contextMenuProvider = contextMenuProvider
         bridge.view = v
         return v
     }
@@ -86,6 +90,7 @@ public struct TreemapView: NSViewRepresentable {
         nsView.onZoomChange = onZoomChange
         nsView.onBreadcrumbChange = onBreadcrumbChange
         nsView.onHoverChange = onHoverChange
+        nsView.contextMenuProvider = contextMenuProvider
     }
 
     public func makeCoordinator() -> Coordinator {

@@ -8,7 +8,7 @@ public enum FileKind: String, Codable, Sendable {
 }
 
 /// Single node in the arena-backed tree. Immutable after snapshot commit.
-public struct FileNode: Equatable, Sendable {
+public struct FileNode: Equatable, Sendable, Codable {
     public var parentID: NodeID
     public var kind: FileKind
     /// Display name (last path component).
@@ -58,6 +58,62 @@ public struct FileNode: Equatable, Sendable {
         self.isSparse = isSparse
         self.isPurgeable = isPurgeable
         self.allowedActions = allowedActions
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case parentID
+        case kind
+        case name
+        case path
+        case logicalSize
+        case allocatedSize
+        case childCount
+        case firstChildID
+        case nextSiblingID
+        case isPackage
+        case mayShareContent
+        case isSparse
+        case isPurgeable
+        case allowedActions
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        parentID = try container.decode(NodeID.self, forKey: .parentID)
+        kind = try container.decode(FileKind.self, forKey: .kind)
+        name = try container.decode(String.self, forKey: .name)
+        path = try container.decode(String.self, forKey: .path)
+        logicalSize = try container.decode(UInt64.self, forKey: .logicalSize)
+        allocatedSize = try container.decode(UInt64.self, forKey: .allocatedSize)
+        childCount = try container.decode(UInt32.self, forKey: .childCount)
+        firstChildID = try container.decode(NodeID.self, forKey: .firstChildID)
+        nextSiblingID = try container.decode(NodeID.self, forKey: .nextSiblingID)
+        isPackage = try container.decode(Bool.self, forKey: .isPackage)
+        mayShareContent = try container.decode(Bool.self, forKey: .mayShareContent)
+        isSparse = try container.decode(Bool.self, forKey: .isSparse)
+        isPurgeable = try container.decode(Bool.self, forKey: .isPurgeable)
+        allowedActions = try container.decodeIfPresent(Set<CleanupAction>.self, forKey: .allowedActions) ?? []
+        allowedActions.remove(.moveToTrash)
+        allowedActions.remove(.moveToLocation)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(parentID, forKey: .parentID)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(name, forKey: .name)
+        try container.encode(path, forKey: .path)
+        try container.encode(logicalSize, forKey: .logicalSize)
+        try container.encode(allocatedSize, forKey: .allocatedSize)
+        try container.encode(childCount, forKey: .childCount)
+        try container.encode(firstChildID, forKey: .firstChildID)
+        try container.encode(nextSiblingID, forKey: .nextSiblingID)
+        try container.encode(isPackage, forKey: .isPackage)
+        try container.encode(mayShareContent, forKey: .mayShareContent)
+        try container.encode(isSparse, forKey: .isSparse)
+        try container.encode(isPurgeable, forKey: .isPurgeable)
+        let readOnlyActions = allowedActions.subtracting([.moveToTrash, .moveToLocation])
+        try container.encode(readOnlyActions, forKey: .allowedActions)
     }
 
     public func size(for metric: SizeMetric) -> UInt64 {

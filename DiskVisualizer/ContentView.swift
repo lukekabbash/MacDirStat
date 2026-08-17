@@ -13,23 +13,28 @@ struct ContentView: View {
     @State private var pendingAction: StorageActionRequest?
     @State private var confirmMove = false
     @State private var pendingMove: MoveRequest?
+    @State private var sidebarVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        HStack(spacing: 0) {
+        NavigationSplitView(columnVisibility: $sidebarVisibility) {
             sidebar
-                .frame(width: 292)
-
-            Rectangle()
-                .fill(DiskVisualStyle.hairline)
-                .frame(width: 1)
-
+                .navigationSplitViewColumnWidth(min: 248, ideal: 292, max: 320)
+        } detail: {
             destinationCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 1_140, minHeight: 680)
         .tint(DiskVisualStyle.interactionAccent)
         .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: model.appDestination)
         .toolbar { toolbar }
+        .background {
+            ThemedWindowChrome(
+                theme: model.themeID,
+                isDark: colorScheme == .dark
+            )
+            .frame(width: 0, height: 0)
+        }
         .sheet(isPresented: $model.showOnboarding) {
             OnboardingView(onContinue: model.dismissOnboarding)
         }
@@ -129,7 +134,38 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            if model.appDestination == .scan, let session = model.session {
+                DashboardToolbarControls(
+                    selection: $model.dashboardMode,
+                    isScanning: model.selectedLocationIsScanning,
+                    isComplete: session.isComplete,
+                    isHistorical: model.isPresentingHistoricalSnapshot,
+                    scanTelemetry: model.scanTelemetry
+                )
+            }
+
+            if model.appDestination == .scan,
+               model.isPresentingHistoricalSnapshot {
+                Button("Current Scan", systemImage: "clock.arrow.circlepath") {
+                    model.selectCurrentSnapshot()
+                }
+                .disabled(model.isSnapshotHistoryBusy)
+                .help("Return to the latest in-memory scan")
+            }
+
             if model.appDestination == .scan, model.session != nil {
+                Button("Save Snapshot", systemImage: "camera") {
+                    Task { await model.saveCurrentSnapshotToHistory() }
+                }
+                .disabled(
+                    model.isScanning
+                        || model.isSnapshotHistoryBusy
+                        || model.isPresentingHistoricalSnapshot
+                        || model.session?.isComplete != true
+                        || model.selectedLocationID == nil
+                )
+                .help("Save this completed scan as an interactive read-only snapshot")
+
                 Button("Zoom Out", systemImage: "arrow.up.left.and.arrow.down.right") {
                     treemapBridge.zoomOut()
                 }
@@ -150,7 +186,7 @@ struct ContentView: View {
                     statusLine: model.statusLine,
                     scanTelemetry: model.scanTelemetry,
                     breadcrumb: breadcrumb,
-                    dashboardMode: $model.dashboardMode
+                    dashboardMode: model.dashboardMode
                 )
                 workspace(session: session)
             }
@@ -194,7 +230,8 @@ struct ContentView: View {
             selectedNodeID: model.selectedNodeID,
             selectedGroupID: model.selectedOverviewGroupID,
             onSelectNode: selectNode,
-            onSelectGroup: selectOverviewGroup
+            onSelectGroup: selectOverviewGroup,
+            contextMenuProvider: storageNodeContextMenu
         )
     }
 
@@ -221,6 +258,7 @@ struct ContentView: View {
                     selectedNodeID: selectedID,
                     metric: model.sizeMetric,
                     cleanupControlsEnabled: model.cleanupControlsEnabled,
+                    allowsReview: !model.presentedSnapshotActionsAreDisabled,
                     close: { selectNode(nil) },
                     quickLook: { _ in model.quickLookSelected() },
                     addToReview: model.addSelectedNodeToReview,
@@ -252,7 +290,20 @@ struct ContentView: View {
                 onSelectionChange: selectNode,
                 onZoomChange: model.focus,
                 onBreadcrumbChange: { breadcrumb = $0 },
-                onHoverChange: { model.hoveredNodeID = $0 }
+                onHoverChange: { model.hoveredNodeID = $0 },
+                contextMenuProvider: { nodeID in
+                    let navigationAction: StorageNodeNavigationAction?
+                    if session.node(id: nodeID)?.childCount ?? 0 > 0 {
+                        navigationAction = StorageNodeNavigationAction(
+                            title: "Open Folder in Map",
+                            systemImage: "arrow.down.right.circle",
+                            perform: { treemapBridge.zoomInto(nodeID) }
+                        )
+                    } else {
+                        navigationAction = nil
+                    }
+                    return storageNodeContextMenu(nodeID, navigationAction)
+                }
             )
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Storage map for \(session.rootDisplayName)")
@@ -315,6 +366,29 @@ struct ContentView: View {
             selection = " No item selected."
         }
         return "\(StoragePresentation.label(for: model.sizeMetric)) sizes, colored by \(model.treemapColorMode.displayName.lowercased()), focused on \(scope).\(selection)"
+    }
+
+    private func storageNodeContextMenu(
+        _ nodeID: NodeID,
+        _ navigationAction: StorageNodeNavigationAction?
+    ) -> NSMenu? {
+        guard let node = model.session?.node(id: nodeID), !node.path.isEmpty else { return nil }
+        let service = CleanupService()
+        return StorageNodeContextMenu.make(
+            node: node,
+            navigationAction: navigationAction,
+            allowsReview: !model.presentedSnapshotActionsAreDisabled,
+            quickLook: {
+                model.selectNode(nodeID)
+                model.quickLookSelected()
+            },
+            open: { service.openFile(path: node.path) },
+            reveal: { service.revealInFinder(path: node.path) },
+            addToReview: {
+                model.selectNode(nodeID)
+                model.addSelectedNodeToReview()
+            }
+        )
     }
 
     private func selectNode(_ id: NodeID?) {
@@ -494,6 +568,17 @@ private struct MapLegendStrip: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 9)
+                .frame(minHeight: DiskVisualStyle.controlHeight)
+                .contentShape(RoundedRectangle(cornerRadius: DiskVisualStyle.controlRadius, style: .continuous))
+                .background(
+                    DiskVisualStyle.contentSurface.opacity(0.58),
+                    in: RoundedRectangle(cornerRadius: DiskVisualStyle.controlRadius, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: DiskVisualStyle.controlRadius, style: .continuous)
+                        .stroke(DiskVisualStyle.hairline, lineWidth: 1)
                 }
             }
             .menuStyle(.borderlessButton)

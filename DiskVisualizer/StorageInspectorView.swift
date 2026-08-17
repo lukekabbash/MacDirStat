@@ -8,6 +8,7 @@ struct StorageInspectorView: View {
     let selectedNodeID: NodeID
     let metric: SizeMetric
     let cleanupControlsEnabled: Bool
+    let allowsReview: Bool
     let close: () -> Void
     let quickLook: (String) -> Void
     let addToReview: () -> Void
@@ -61,7 +62,7 @@ struct StorageInspectorView: View {
             Button(action: close) {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderless)
             .help("Close Inspector")
@@ -140,7 +141,8 @@ struct StorageInspectorView: View {
                     .disabled(!hasPath)
                 Button("Add to Review", action: addToReview)
                     .buttonStyle(.bordered)
-                    .disabled(!canMutate)
+                    .disabled(!canMutate || !allowsReview)
+                    .help(allowsReview ? "Add this item to Review" : "Historical snapshots are read-only")
             }
 
             if cleanupControlsEnabled {

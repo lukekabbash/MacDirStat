@@ -134,22 +134,6 @@ struct SavedLocationRow: View {
     }
 }
 
-struct SidebarProgress: View {
-    let activity: ScanActivity
-    var body: some View {
-        VStack(spacing: 4) {
-            ProgressView(value: activity.fractionCompleted ?? 0).progressViewStyle(.linear)
-            HStack {
-                Text(activity.phase.displayName)
-                Spacer()
-                Text(activity.percentageText ?? "0%").fontWeight(.semibold).monospacedDigit()
-            }.font(.caption2).foregroundStyle(.secondary)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Scan progress \(activity.percentageText ?? "0 percent")")
-    }
-}
-
 struct SidebarSearchField: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
@@ -271,9 +255,10 @@ private final class ScrollChromeProbeView: NSView {
 
 /// Keeps native scrolling intentionally intact. The system remains the source
 /// of truth for overlay versus always-visible scroll bars and their auto-hide
-/// behavior; this only selects AppKit's smallest standard metric and a knob
-/// polarity that remains legible against the active appearance.
+/// behavior; this only installs a component-local vertical scroller that draws
+/// a narrower thumb inside AppKit's standard interaction lane.
 private struct DiskScrollChromeConfigurator: NSViewRepresentable {
+    @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
 
     func makeNSView(context: Context) -> ScrollChromeProbeView {
@@ -289,21 +274,17 @@ private struct DiskScrollChromeConfigurator: NSViewRepresentable {
 
     private func configure(_ probe: ScrollChromeProbeView) {
         let colorScheme = colorScheme
+        let themeToken = model.themeID.rawValue
         probe.applyScrollChrome = { scrollView in
             let usesHighContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
-            let controlSize: NSControl.ControlSize = usesHighContrast ? .small : .mini
-            let knobStyle: NSScroller.KnobStyle = usesHighContrast
-                ? .default
-                : colorScheme == .dark ? .light : .dark
-
             // Do not set scrollerStyle or autohidesScrollers here. Those
             // values belong to macOS and follow the user's Scroll Bar setting.
-            if scrollView.scrollerKnobStyle != knobStyle {
-                scrollView.scrollerKnobStyle = knobStyle
-            }
-            if scrollView.verticalScroller?.controlSize != controlSize {
-                scrollView.verticalScroller?.controlSize = controlSize
-            }
+            guard let scroller = DiskSlimScroller.install(in: scrollView) else { return }
+            scroller.applyChrome(
+                themeToken: themeToken,
+                colorScheme: colorScheme,
+                usesHighContrast: usesHighContrast
+            )
         }
     }
 }

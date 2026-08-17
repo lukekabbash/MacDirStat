@@ -63,6 +63,7 @@ public final class TreemapNSView: NSView {
     public var onZoomChange: ((NodeID) -> Void)?
     public var onBreadcrumbChange: (([NodeID]) -> Void)?
     public var onHoverChange: ((NodeID?) -> Void)?
+    public var contextMenuProvider: ((NodeID) -> NSMenu?)?
 
     private var tiles: [TreemapTile] = []
     public private(set) var selectedNodeID: NodeID?
@@ -426,24 +427,30 @@ public final class TreemapNSView: NSView {
     public override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard let index = hitTestTileIndex(at: point) else {
-            let previousID = selectedNodeID
-            selectedNodeID = nil
-            onSelectionChange?(nil)
-            invalidateInteraction(nodeIDs: [previousID])
+            selectFromPointer(nil)
             return
         }
         let tile = tiles[index]
         guard tile.role == .node else {
-            let previousID = selectedNodeID
-            selectedNodeID = nil
-            onSelectionChange?(nil)
-            invalidateInteraction(nodeIDs: [previousID])
+            selectFromPointer(nil)
             return
         }
-        let previousID = selectedNodeID
-        selectedNodeID = tile.nodeID
-        onSelectionChange?(tile.nodeID)
-        invalidateInteraction(nodeIDs: [previousID, tile.nodeID])
+        selectFromPointer(tile.nodeID)
+    }
+
+    public override func menu(for event: NSEvent) -> NSMenu? {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let index = hitTestTileIndex(at: point),
+              tiles.indices.contains(index),
+              tiles[index].role == .node,
+              let contextMenuProvider
+        else { return nil }
+
+        let nodeID = tiles[index].nodeID
+        selectFromPointer(nodeID)
+        let menu = contextMenuProvider(nodeID)
+        menu?.appearance = window?.effectiveAppearance
+        return menu
     }
 
     public override func mouseMoved(with event: NSEvent) {
@@ -492,6 +499,15 @@ public final class TreemapNSView: NSView {
         }
         pendingHoverCallback = item
         DispatchQueue.main.asyncAfter(deadline: .now() + hoverReadoutDelay, execute: item)
+    }
+
+    private func selectFromPointer(_ nodeID: NodeID?) {
+        let validID = nodeID.flatMap { session?.node(id: $0) == nil ? nil : $0 }
+        guard validID != selectedNodeID else { return }
+        let previousID = selectedNodeID
+        selectedNodeID = validID
+        onSelectionChange?(validID)
+        invalidateInteraction(nodeIDs: [previousID, validID])
     }
 
     private func invalidateInteraction(tileIndices: [Int?]) {

@@ -18,6 +18,7 @@ struct StorageInsightsView: View {
     let selectedGroupID: String?
     let onSelectNode: (NodeID?) -> Void
     let onSelectGroup: (StorageBreakdownItem) -> Void
+    let contextMenuProvider: StorageNodeContextMenuProvider
     @State private var chartsVisible = false
     @State private var presentation: StorageOverviewPresentation = .summary
     @State private var sunburstScopeNodeID: NodeID = .root
@@ -47,7 +48,8 @@ struct StorageInsightsView: View {
                                 metric: metric,
                                 selectedNodeID: selectedNodeID,
                                 scopeNodeID: $sunburstScopeNodeID,
-                                onSelectNode: onSelectNode
+                                onSelectNode: onSelectNode,
+                                contextMenuProvider: contextMenuProvider
                             )
                         }
                     }
@@ -240,6 +242,7 @@ private struct OverviewPresentationControl: View {
                         .foregroundStyle(selection == style ? DiskVisualStyle.interactionStrong : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 25)
+                        .contentShape(Rectangle())
                         .background {
                             if selection == style {
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)

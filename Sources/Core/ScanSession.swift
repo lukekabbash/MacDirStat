@@ -1,7 +1,7 @@
 import Foundation
 
 /// Immutable snapshot of a scan at a point in time.
-public struct ScanSession: Equatable, Sendable {
+public struct ScanSession: Equatable, Sendable, Codable {
     public var rootURLBookmarkID: UUID?
     public var rootDisplayName: String
     public var options: ScanOptions

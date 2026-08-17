@@ -38,10 +38,11 @@ The current preview is checksum-verified and ad-hoc signed, but not yet Apple-no
 The map is the primary surface, not a decorative summary. Every block is proportional to its size. Color can follow file type or top-level location, folders can be opened in place, and the optional capacity view adds free space and used space outside the selected scan without pretending those bytes belong to the folder.
 
 - **Map while scanning.** The treemap grows while a determinate progress bar moves toward a measured total.
-- **Map or Overview.** Move from spatial hierarchy to a donut, ranked distribution bars, and the largest individual items.
+- **Map or Overview.** Use the titlebar control to move from the spatial map to a category summary or a drillable Sunburst of real folder layers.
 - **On disk or logical size.** Use allocated bytes for practical disk pressure and logical bytes when file length is the better question.
-- **Saved locations, separate snapshots.** A folder, drive, or full-Mac scan keeps its own state and is never silently combined with another source.
-- **Search and inspect without reflow.** Selection details stay in a fixed inspector so the map does not move under the pointer.
+- **Saved locations, separate snapshots.** Save a completed interactive scan beneath its location, reopen it read-only, and compare that source over time without silently combining unrelated roots.
+- **Search and inspect without losing context.** The inspector opens as a real trailing column; changing selections then crossfades its contents without replaying the layout transition.
+- **Act from the shape itself.** Right-click a map block or Sunburst section to open it, preview it, reveal it in Finder, copy its path, or add it to Review; deletion remains in the guarded inspector.
 
 <table>
   <tr>
@@ -83,7 +84,7 @@ Mac Directory Statistics is useful with deletion completely disabled—and that 
 
 ## A quieter frame, useful color
 
-Storage categories keep stable colors while the surrounding interface stays restrained. **Soft Glass** is the default, with light and dark appearance controls plus presets including Integrator, Usonian, Graphite, Midnight, Paper, Sage, and High Contrast. Reduced-motion and keyboard-accessible paths are built into the same interface rather than maintained as a separate experience.
+Storage categories keep stable colors while the surrounding interface stays restrained. **Soft Glass** is the default, with light and dark appearance controls plus presets including Integrator, Usonian, Graphite, Midnight, Paper, Sage, and High Contrast. Each preset includes a purpose-made version of the app mark rather than a simulated color swatch, and its colors continue through the native titlebar instead of stopping at the content edge. Reduced-motion and keyboard-accessible paths are built into the same interface rather than maintained as a separate experience.
 
 <p align="center">
   <img src="docs/images/settings-themes.png" width="900" alt="Mac Directory Statistics settings showing appearance themes, scan controls, and deletion disabled">

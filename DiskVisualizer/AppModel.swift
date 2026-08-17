@@ -128,14 +128,15 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(themeID.rawValue, forKey: Self.themeIDKey) }
     }
     @Published var session: ScanSession?
-    @Published var appDestination: AppDestination = .scan {
-        didSet {
-            if appDestination == .apps { prepareAppInventory() }
-        }
-    }
+    @Published var appDestination: AppDestination = .scan
     @Published var savedLocations: [SavedLocation] = []
     @Published var selectedLocationID: UUID?
     @Published var snapshotCatalogRevision = 0
+    @Published var savedSnapshotDescriptors: [ScanSnapshotDescriptor] = []
+    @Published var selectedHistoricalSnapshotID: UUID?
+    @Published var isSnapshotHistoryBusy = false
+    @Published var snapshotHistoryError: String?
+    var snapshotHistoryOperationID = UUID()
     @Published var reviewItems: [ReviewItem] = []
     @Published var selectedReviewItemID: UUID?
     @Published var appInventoryScope: AppInventoryScope = .selectedLocation {
@@ -153,7 +154,7 @@ final class AppModel: ObservableObject {
             prepareOverviewIfNeeded()
             prepareSelectedOverviewGroupIfNeeded()
             prepareMapLegendIfNeeded()
-            prepareAppInventory()
+            resortAppInventoryForMetric()
         }
     }
     @Published var dashboardMode: DashboardMode = .map {
@@ -208,13 +209,14 @@ final class AppModel: ObservableObject {
     private let engine = ScanEngine()
     let quickLookService = QuickLookService()
     let savedLocationStore = SavedLocationStore.default
+    let snapshotStore = SnapshotStore.default
     let reviewStore = ReviewStore.default
     var locationSnapshots: [UUID: LocationSnapshot] = [:]
     var activeCancellationState: CancellationState?
     var activeScanID = UUID()
     var activeScanLocationID: UUID?
     var scanTask: Task<Void, Never>?
-    var appInventoryTask: Task<Void, Never>?
+    let appInventoryPipeline = AppInventoryPipelineState()
     private var overviewTask: Task<Void, Never>?
     private var overviewGroupTask: Task<Void, Never>?
     private var mapLegendTask: Task<Void, Never>?
@@ -371,6 +373,11 @@ final class AppModel: ObservableObject {
     /// already supplies the underlying read-write scope, so toggling it should
     /// never force an expensive filesystem rescan.
     func setCleanupControls(enabled: Bool) {
+        guard !enabled || selectedHistoricalSnapshotID == nil else {
+            cleanupControlsEnabled = false
+            statusLine = "Saved snapshots are read-only · return to the current scan to change files"
+            return
+        }
         guard let id = selectedLocationID,
               let index = savedLocations.firstIndex(where: { $0.id == id })
         else {
@@ -395,6 +402,10 @@ final class AppModel: ObservableObject {
         guard !isScanning else {
             statusLine = "One location is already scanning. Stop it before starting another."
             return
+        }
+
+        if selectedHistoricalSnapshotID != nil {
+            selectCurrentSnapshot()
         }
 
         activeCancellationState?.cancel()

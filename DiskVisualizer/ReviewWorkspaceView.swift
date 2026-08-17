@@ -25,25 +25,64 @@ struct ReviewWorkspaceView: View {
             .padding(.horizontal, 18).frame(height: 54)
             .background(DiskVisualStyle.contentSurface.opacity(0.58))
 
-            ContextualInspectorSplit(isPresented: selected != nil) {
+            ContextualInspectorSplit(selection: selected?.id) {
                 reviewList
-            } inspector: {
+            } inspector: { identifier in
+                let item = reviewItem(for: identifier)
                 ReviewInspector(
-                    item: selected,
-                    state: selected.map(model.reviewState(for:)),
-                    sourceName: selected.map { model.sourceName(for: $0.sourceLocationID) },
+                    item: item,
+                    state: item.map(model.reviewState(for:)),
+                    sourceName: item.map { model.sourceName(for: $0.sourceLocationID) },
                     metric: model.sizeMetric,
-                    close: { model.selectedReviewItemID = nil },
-                    quickLook: model.quickLookSelected,
-                    reveal: { selected.map { CleanupService().revealInFinder(path: $0.path) } },
-                    remove: { if let selected { model.removeFromReview(selected.id) } },
-                    move: { if let selected { requestMove(selected.sourceLocationID, selected.path, selected.name, selected.isPackage && selected.path.lowercased().hasSuffix(".app")) } },
-                    trash: { if let selected { requestTrash(selected.sourceLocationID, selected.path, selected.name, selected.isPackage && selected.path.lowercased().hasSuffix(".app")) } }
+                    close: { closeInspector(for: identifier) },
+                    quickLook: { quickLookReviewItem(identifier) },
+                    reveal: { revealReviewItem(identifier) },
+                    remove: { removeReviewItem(identifier) },
+                    move: { moveReviewItem(identifier) },
+                    trash: { trashReviewItem(identifier) }
                 )
             }
         }
         .background(DiskVisualStyle.canvas)
         .onAppear { model.refreshSelectedReviewStates() }
+    }
+
+    private func reviewItem(for identifier: UUID) -> ReviewItem? {
+        model.reviewItems.first { $0.id == identifier }
+    }
+
+    private func selectedReviewItem(for identifier: UUID) -> ReviewItem? {
+        guard model.selectedReviewItemID == identifier else { return nil }
+        return reviewItem(for: identifier)
+    }
+
+    private func closeInspector(for identifier: UUID) {
+        guard model.selectedReviewItemID == identifier else { return }
+        model.selectedReviewItemID = nil
+    }
+
+    private func quickLookReviewItem(_ identifier: UUID) {
+        guard model.selectedReviewItemID == identifier else { return }
+        model.quickLookSelected()
+    }
+
+    private func revealReviewItem(_ identifier: UUID) {
+        selectedReviewItem(for: identifier).map { CleanupService().revealInFinder(path: $0.path) }
+    }
+
+    private func removeReviewItem(_ identifier: UUID) {
+        guard selectedReviewItem(for: identifier) != nil else { return }
+        model.removeFromReview(identifier)
+    }
+
+    private func moveReviewItem(_ identifier: UUID) {
+        guard let item = selectedReviewItem(for: identifier) else { return }
+        requestMove(item.sourceLocationID, item.path, item.name, item.isPackage && item.path.lowercased().hasSuffix(".app"))
+    }
+
+    private func trashReviewItem(_ identifier: UUID) {
+        guard let item = selectedReviewItem(for: identifier) else { return }
+        requestTrash(item.sourceLocationID, item.path, item.name, item.isPackage && item.path.lowercased().hasSuffix(".app"))
     }
 
     @ViewBuilder private var reviewList: some View {

@@ -62,7 +62,7 @@ struct StorageGroupInspectorView: View {
             Button(action: close) {
                 Image(systemName: "xmark")
                     .font(.caption.weight(.semibold))
-                    .frame(width: 20, height: 20)
+                    .frame(width: 28, height: 28)
             }
             .buttonStyle(.borderless)
             .help("Close Inspector")
