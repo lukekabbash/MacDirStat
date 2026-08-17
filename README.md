@@ -29,7 +29,7 @@ It launches idle, keeps every saved location independent, and leaves deletion di
 
 1. Download the universal macOS DMG from the [latest GitHub release](https://github.com/lukekabbash/mac-directory-statistics/releases/latest).
 2. Open the DMG and drag **Mac Directory Statistics** into **Applications**.
-3. For v0.1.0, Control-click the app the first time, choose **Open**, and confirm **Open**.
+3. For the current ad-hoc-signed preview, Control-click the app the first time, choose **Open**, and confirm **Open**.
 
 The current preview is checksum-verified and ad-hoc signed, but not yet Apple-notarized. The one-time Control-click is required because macOS cannot establish a verified Developer ID publisher yet; no terminal command is needed.
 
@@ -38,7 +38,7 @@ The current preview is checksum-verified and ad-hoc signed, but not yet Apple-no
 The map is the primary surface, not a decorative summary. Every block is proportional to its size. Color can follow file type or top-level location, folders can be opened in place, and the optional capacity view adds free space and used space outside the selected scan without pretending those bytes belong to the folder.
 
 - **Map while scanning.** The treemap grows while a determinate progress bar moves toward a measured total.
-- **Map or Overview.** Use the titlebar control to move from the spatial map to a category summary or a drillable Sunburst of real folder layers.
+- **Map or Overview.** Use the compact dashboard-header controls to move from the spatial map to a category summary or a drillable Sunburst of real folder layers.
 - **On disk or logical size.** Use allocated bytes for practical disk pressure and logical bytes when file length is the better question.
 - **Saved locations, separate snapshots.** Save a completed interactive scan beneath its location, reopen it read-only, and compare that source over time without silently combining unrelated roots.
 - **Search and inspect without losing context.** The inspector opens as a real trailing column; changing selections then crossfades its contents without replaying the layout transition.
