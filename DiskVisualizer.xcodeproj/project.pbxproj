@@ -29,6 +29,10 @@
 		A10000010000000000000014 /* AppsWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000015 /* AppsWorkspaceView.swift */; };
 		A10000010000000000000015 /* ReviewWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000016 /* ReviewWorkspaceView.swift */; };
 		A10000010000000000000016 /* WorkspaceSidebarComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000017 /* WorkspaceSidebarComponents.swift */; };
+		A10000010000000000000017 /* StorageHierarchyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000018 /* StorageHierarchyView.swift */; };
+		A10000010000000000000018 /* StorageSunburstChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000019 /* StorageSunburstChart.swift */; };
+		A10000010000000000000019 /* WorkspaceSplitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000001A /* WorkspaceSplitView.swift */; };
+		A1000001000000000000001A /* StorageSunburstGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000001B /* StorageSunburstGeometry.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +58,10 @@
 		A10000020000000000000015 /* AppsWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppsWorkspaceView.swift; sourceTree = "<group>"; };
 		A10000020000000000000016 /* ReviewWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewWorkspaceView.swift; sourceTree = "<group>"; };
 		A10000020000000000000017 /* WorkspaceSidebarComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSidebarComponents.swift; sourceTree = "<group>"; };
+		A10000020000000000000018 /* StorageHierarchyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageHierarchyView.swift; sourceTree = "<group>"; };
+		A10000020000000000000019 /* StorageSunburstChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSunburstChart.swift; sourceTree = "<group>"; };
+		A1000002000000000000001A /* WorkspaceSplitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSplitView.swift; sourceTree = "<group>"; };
+		A1000002000000000000001B /* StorageSunburstGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageSunburstGeometry.swift; sourceTree = "<group>"; };
 		A10000020000000000000004 /* DiskVisualizer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DiskVisualizer.entitlements; sourceTree = "<group>"; };
 		A10000030000000000000001 /* DiskVisualizer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DiskVisualizer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -85,6 +93,7 @@
 				A10000020000000000000012 /* AppModel+Locations.swift */,
 				A10000020000000000000013 /* AppModel+InventoryReview.swift */,
 				A10000020000000000000003 /* ContentView.swift */,
+				A1000002000000000000001A /* WorkspaceSplitView.swift */,
 				A10000020000000000000010 /* WorkspaceModels.swift */,
 				A10000020000000000000014 /* WorkspaceSidebar.swift */,
 				A10000020000000000000017 /* WorkspaceSidebarComponents.swift */,
@@ -96,6 +105,9 @@
 				A10000020000000000000007 /* StorageExplorerSidebar.swift */,
 				A10000020000000000000008 /* StorageInspectorView.swift */,
 				A10000020000000000000009 /* StorageInsightsView.swift */,
+				A10000020000000000000018 /* StorageHierarchyView.swift */,
+				A10000020000000000000019 /* StorageSunburstChart.swift */,
+				A1000002000000000000001B /* StorageSunburstGeometry.swift */,
 				A1000002000000000000000B /* StorageGroupInspectorView.swift */,
 				A1000002000000000000000C /* VolumeSpaceContextView.swift */,
 				A1000002000000000000000D /* DiskTheme.swift */,
@@ -194,6 +206,7 @@
 				A10000010000000000000001 /* DiskVisualizerApp.swift in Sources */,
 				A10000010000000000000002 /* AppModel.swift in Sources */,
 				A10000010000000000000003 /* ContentView.swift in Sources */,
+				A10000010000000000000019 /* WorkspaceSplitView.swift in Sources */,
 				A10000010000000000000004 /* CleanupService.swift in Sources */,
 				A10000010000000000000005 /* DiskDashboardHeader.swift in Sources */,
 				A10000010000000000000006 /* StorageExplorerSidebar.swift in Sources */,
@@ -212,6 +225,9 @@
 				A10000010000000000000014 /* AppsWorkspaceView.swift in Sources */,
 				A10000010000000000000015 /* ReviewWorkspaceView.swift in Sources */,
 				A10000010000000000000016 /* WorkspaceSidebarComponents.swift in Sources */,
+				A10000010000000000000017 /* StorageHierarchyView.swift in Sources */,
+				A10000010000000000000018 /* StorageSunburstChart.swift in Sources */,
+				A1000001000000000000001A /* StorageSunburstGeometry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

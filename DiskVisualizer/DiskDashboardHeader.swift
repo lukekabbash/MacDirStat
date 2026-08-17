@@ -32,6 +32,7 @@ enum StoragePresentation {
 /// One compact orientation strip carries location, live scan state, totals,
 /// and the workspace view. The map remains the dominant visual surface.
 struct DiskDashboardHeader: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: ScanSession
     let metric: SizeMetric
     let isScanning: Bool
@@ -56,18 +57,8 @@ struct DiskDashboardHeader: View {
                 orientation
                     .frame(minWidth: 170, maxWidth: 310, alignment: .leading)
 
-                Group {
-                    if isScanning, let activity = scanTelemetry.activity {
-                        CompactScanActivity(activity: activity)
-                    } else {
-                        Text("\(StoragePresentation.bytes(currentSize)) · \(visibleItemCount.formatted()) items")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .help(statusLine)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .contentTransition(.numericText())
+                headerReadout
+                    .frame(maxWidth: .infinity, alignment: .center)
 
                 DashboardModeControl(selection: $dashboardMode)
                     .frame(width: 166)
@@ -81,44 +72,81 @@ struct DiskDashboardHeader: View {
             if isScanning, let activity = scanTelemetry.activity {
                 ProgressView(value: activity.fractionCompleted ?? 0)
                     .progressViewStyle(.linear)
-                    .tint(DiskVisualStyle.accent)
+                    .tint(DiskVisualStyle.interactionAccent)
                     .frame(height: 2)
                     .transition(.opacity)
             }
         }
         .background(DiskVisualStyle.contentSurface.opacity(0.66))
-        .animation(DiskVisualStyle.motion, value: isScanning)
+        .animation(reduceMotion ? nil : DiskVisualStyle.motion, value: isScanning)
     }
 
-    @ViewBuilder
     private var orientation: some View {
-        if dashboardMode == .map {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 5) {
-                    Image(systemName: "internaldrive")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(DiskVisualStyle.accentStrong)
-                    ForEach(Array(breadcrumb.enumerated()), id: \.offset) { index, nodeID in
-                        if index > 0 {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 8, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        Text(session.node(id: nodeID)?.name ?? "Unknown")
-                            .font(.caption.weight(index == breadcrumb.count - 1 ? .semibold : .regular))
-                            .foregroundStyle(index == breadcrumb.count - 1 ? Color.primary : Color.secondary)
-                            .lineLimit(1)
+        ZStack(alignment: .leading) {
+            if dashboardMode == .map {
+                breadcrumbOrientation
+                    .transition(headerContentTransition)
+            } else {
+                Label("Storage overview", systemImage: "chart.bar.xaxis")
+                    .font(.caption.weight(.semibold))
+                    .transition(headerContentTransition)
+            }
+        }
+        .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: dashboardMode)
+    }
+
+    private var breadcrumbOrientation: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 5) {
+                Image(systemName: "internaldrive")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DiskVisualStyle.iconAccent)
+                ForEach(Array(breadcrumb.enumerated()), id: \.offset) { index, nodeID in
+                    if index > 0 {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.tertiary)
                     }
+                    Text(session.node(id: nodeID)?.name ?? "Unknown")
+                        .font(.caption.weight(index == breadcrumb.count - 1 ? .semibold : .regular))
+                        .foregroundStyle(index == breadcrumb.count - 1 ? Color.primary : Color.secondary)
+                        .lineLimit(1)
                 }
             }
-        } else {
-            Label("Storage overview", systemImage: "chart.bar.xaxis")
-                .font(.caption.weight(.semibold))
         }
+    }
+
+    private var headerReadout: some View {
+        ZStack {
+            if isScanning, let activity = scanTelemetry.activity {
+                CompactScanActivity(activity: activity)
+                    .transition(headerContentTransition)
+            } else {
+                Text("\(StoragePresentation.bytes(currentSize)) · \(visibleItemCount.formatted()) items")
+                    .id(metric)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .help(statusLine)
+                    .contentTransition(.numericText())
+                    .transition(headerContentTransition)
+            }
+        }
+        .animation(reduceMotion ? nil : DiskVisualStyle.motion, value: readoutState)
+    }
+
+    private var readoutState: String {
+        isScanning ? "scanning" : "summary-\(metric.rawValue)"
+    }
+
+    private var headerContentTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .opacity.combined(with: .offset(y: 2))
     }
 }
 
 private struct DashboardModeControl: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: DashboardMode
     @Namespace private var selectionSurface
 
@@ -126,11 +154,11 @@ private struct DashboardModeControl: View {
         HStack(spacing: 2) {
             ForEach(DashboardMode.allCases, id: \.self) { mode in
                 Button {
-                    withAnimation(DiskVisualStyle.selectionMotion) { selection = mode }
+                    select(mode)
                 } label: {
                     Label(mode.displayName, systemImage: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(selection == mode ? Color.primary : Color.secondary)
+                        .foregroundStyle(selection == mode ? DiskVisualStyle.interactionStrong : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 25)
                         .background {
@@ -143,6 +171,9 @@ private struct DashboardModeControl: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(mode.displayName)
+                .accessibilityValue(selection == mode ? "Selected" : "Not selected")
+                .accessibilityAddTraits(selection == mode ? .isSelected : [])
             }
         }
         .padding(2)
@@ -150,6 +181,17 @@ private struct DashboardModeControl: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+        }
+    }
+
+    private func select(_ mode: DashboardMode) {
+        guard mode != selection else { return }
+        if reduceMotion {
+            selection = mode
+        } else {
+            withAnimation(DiskVisualStyle.contentMotion) {
+                selection = mode
+            }
         }
     }
 }
@@ -188,7 +230,7 @@ private struct ScanStateBadge: View {
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(activity == nil ? (isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention) : DiskVisualStyle.accent)
+                .fill(activity == nil ? (isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention) : DiskVisualStyle.interactionAccent)
                 .frame(width: 6, height: 6)
             Text(activity?.percentageText ?? (activity == nil ? (isComplete ? "Current" : "Partial") : "0%"))
                 .font(.caption2.weight(.semibold).monospacedDigit())
@@ -227,7 +269,7 @@ struct ScanProgressPanel: View {
 
             ProgressView(value: activity.fractionCompleted ?? 0)
                 .progressViewStyle(.linear)
-                .tint(DiskVisualStyle.accent)
+                .tint(DiskVisualStyle.interactionAccent)
 
             HStack(spacing: 7) {
                 Text("\(activity.inspectedItems.formatted()) items")
@@ -374,11 +416,11 @@ private struct IdleTreemapPreview: View {
                     .fill(DiskVisualStyle.contentSurface)
 
                 Group {
-                    previewBlock(x: 0.018, y: 0.025, width: 0.47, height: 0.59, color: DiskVisualStyle.accent)
+                    previewBlock(x: 0.018, y: 0.025, width: 0.47, height: 0.59, color: DiskVisualStyle.interactionAccent)
                     previewBlock(x: 0.018, y: 0.645, width: 0.47, height: 0.33, color: DiskVisualStyle.attention)
                     previewBlock(x: 0.505, y: 0.025, width: 0.477, height: 0.37, color: DiskVisualStyle.available)
                     previewBlock(x: 0.505, y: 0.415, width: 0.285, height: 0.56, color: DiskVisualStyle.neutral)
-                    previewBlock(x: 0.808, y: 0.415, width: 0.174, height: 0.265, color: DiskVisualStyle.accentStrong)
+                    previewBlock(x: 0.808, y: 0.415, width: 0.174, height: 0.265, color: DiskVisualStyle.iconAccent)
                     previewBlock(x: 0.808, y: 0.70, width: 0.174, height: 0.275, color: DiskVisualStyle.available)
                 }
                 .opacity(scopeName == nil ? 0.10 : 0.16)
@@ -386,7 +428,7 @@ private struct IdleTreemapPreview: View {
                 VStack(spacing: 7) {
                     Image(systemName: scopeName == nil ? "folder.badge.plus" : "play.fill")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(DiskVisualStyle.accentStrong)
+                        .foregroundStyle(DiskVisualStyle.iconAccent)
                     Text(scopeName == nil ? "Choose what to map" : "Ready to scan")
                         .font(.headline)
                     Text(scopeName == nil ? "Full Mac or a focused folder" : "The map will fill here as files are measured")
@@ -487,7 +529,7 @@ private struct DiskControlButtonBody<Label: View>: View {
     var body: some View {
         label
             .font(.caption.weight(.medium))
-            .foregroundStyle(isSelected ? DiskVisualStyle.accentStrong : Color.secondary)
+            .foregroundStyle(isSelected ? DiskVisualStyle.interactionStrong : Color.secondary)
             .padding(.horizontal, 9)
             .frame(minHeight: DiskVisualStyle.controlHeight)
             .background(
@@ -496,7 +538,7 @@ private struct DiskControlButtonBody<Label: View>: View {
             )
             .overlay {
                 RoundedRectangle(cornerRadius: DiskVisualStyle.controlRadius, style: .continuous)
-                    .stroke(isSelected ? DiskVisualStyle.accent.opacity(0.48) : DiskVisualStyle.hairline, lineWidth: 1)
+                    .stroke(isSelected ? DiskVisualStyle.interactionAccent.opacity(0.48) : DiskVisualStyle.hairline, lineWidth: 1)
             }
             .offset(y: isPressed ? 0.5 : 0)
             .opacity(isEnabled ? 1 : 0.42)
@@ -515,6 +557,7 @@ private struct DiskControlButtonBody<Label: View>: View {
 }
 
 private struct InteractiveRowSurface: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let isHovered: Bool
     let isSelected: Bool
 
@@ -524,8 +567,8 @@ private struct InteractiveRowSurface: ViewModifier {
                 isSelected ? DiskVisualStyle.selection : isHovered ? DiskVisualStyle.hover : Color.clear,
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
-            .animation(DiskVisualStyle.motion, value: isHovered)
-            .animation(DiskVisualStyle.settleMotion, value: isSelected)
+            .animation(reduceMotion ? nil : DiskVisualStyle.motion, value: isHovered)
+            .animation(reduceMotion ? nil : DiskVisualStyle.settleMotion, value: isSelected)
     }
 }
 

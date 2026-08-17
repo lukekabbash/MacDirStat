@@ -63,6 +63,8 @@ struct SidebarDestinationRow: View {
             }
         }
         .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .onHover { hovered = $0 }
     }
 }
@@ -85,7 +87,7 @@ struct SavedLocationRow: View {
             HStack(spacing: 8) {
                 Image(systemName: location.isPinned ? "pin.fill" : location.availability == .ready ? "internaldrive" : "exclamationmark.triangle")
                     .font(.caption)
-                    .foregroundStyle(location.availability == .ready ? DiskVisualStyle.accentStrong : DiskVisualStyle.attention)
+                    .foregroundStyle(location.availability == .ready ? DiskVisualStyle.iconAccent : DiskVisualStyle.attention)
                     .frame(width: 17)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(location.displayName).font(.caption.weight(.medium)).lineLimit(1)
@@ -177,7 +179,7 @@ struct SidebarNodeRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 7) {
-                Image(systemName: StoragePresentation.icon(for: row.node.kind)).font(.caption).foregroundStyle(row.node.kind == .file ? .secondary : DiskVisualStyle.accentStrong).frame(width: 17)
+                Image(systemName: StoragePresentation.icon(for: row.node.kind)).font(.caption).foregroundStyle(row.node.kind == .file ? .secondary : DiskVisualStyle.iconAccent).frame(width: 17)
                 Text(row.node.name).font(.caption.weight(.medium)).lineLimit(1)
                 Spacer()
                 Text(StoragePresentation.bytes(row.size)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
@@ -237,7 +239,7 @@ struct NewLocationSheet: View {
     private func choice(_ title: String, _ symbol: String, _ detail: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 13) {
-                Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(DiskVisualStyle.accentStrong).frame(width: 34, height: 34).background(DiskVisualStyle.selection, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                Image(systemName: symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(DiskVisualStyle.iconAccent).frame(width: 34, height: 34).background(DiskVisualStyle.selection, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) { Text(title).font(.subheadline.weight(.semibold)); Text(detail).font(.caption).foregroundStyle(.secondary) }
                 Spacer(); Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
             }
@@ -246,27 +248,70 @@ struct NewLocationSheet: View {
     }
 }
 
-private struct SidebarScrollViewConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView { NSView() }
+/// A zero-layout probe lets the containing SwiftUI scroll view keep all of
+/// AppKit's native behavior while its scroller is configured once it exists.
+private final class ScrollChromeProbeView: NSView {
+    var applyScrollChrome: ((NSScrollView) -> Void)?
 
-    func updateNSView(_ nsView: NSView, context: Context) {
-        configure(nsView)
-        DispatchQueue.main.async { [weak nsView] in
-            guard let nsView else { return }
-            configure(nsView)
-        }
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        applyConfiguration()
     }
 
-    private func configure(_ view: NSView) {
-        guard let scrollView = view.enclosingScrollView else { return }
-        scrollView.scrollerStyle = .overlay
-        scrollView.autohidesScrollers = true
-        scrollView.verticalScroller?.controlSize = .mini
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyConfiguration()
+    }
+
+    func applyConfiguration() {
+        guard let scrollView = enclosingScrollView else { return }
+        applyScrollChrome?(scrollView)
+    }
+}
+
+/// Keeps native scrolling intentionally intact. The system remains the source
+/// of truth for overlay versus always-visible scroll bars and their auto-hide
+/// behavior; this only selects AppKit's smallest standard metric and a knob
+/// polarity that remains legible against the active appearance.
+private struct DiskScrollChromeConfigurator: NSViewRepresentable {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func makeNSView(context: Context) -> ScrollChromeProbeView {
+        let probe = ScrollChromeProbeView()
+        configure(probe)
+        return probe
+    }
+
+    func updateNSView(_ nsView: ScrollChromeProbeView, context: Context) {
+        configure(nsView)
+        nsView.applyConfiguration()
+    }
+
+    private func configure(_ probe: ScrollChromeProbeView) {
+        let colorScheme = colorScheme
+        probe.applyScrollChrome = { scrollView in
+            let usesHighContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+            let controlSize: NSControl.ControlSize = usesHighContrast ? .small : .mini
+            let knobStyle: NSScroller.KnobStyle = usesHighContrast
+                ? .default
+                : colorScheme == .dark ? .light : .dark
+
+            // Do not set scrollerStyle or autohidesScrollers here. Those
+            // values belong to macOS and follow the user's Scroll Bar setting.
+            if scrollView.scrollerKnobStyle != knobStyle {
+                scrollView.scrollerKnobStyle = knobStyle
+            }
+            if scrollView.verticalScroller?.controlSize != controlSize {
+                scrollView.verticalScroller?.controlSize = controlSize
+            }
+        }
     }
 }
 
 extension View {
-    func thinSidebarScroller() -> some View {
-        background(SidebarScrollViewConfigurator())
+    /// Gives vertical workspace surfaces quiet, theme-coherent native chrome.
+    /// It does not replace, hide, or resize the scroll view itself.
+    func diskScrollChrome() -> some View {
+        background(DiskScrollChromeConfigurator())
     }
 }

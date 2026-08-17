@@ -13,13 +13,14 @@ struct AppsWorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            HStack(spacing: 0) {
+            ContextualInspectorSplit(isPresented: selected != nil) {
                 inventory
-                Rectangle().fill(DiskVisualStyle.hairline).frame(width: 1)
+            } inspector: {
                 AppInspector(
                     item: selected,
                     metric: model.sizeMetric,
                     deletionAllowed: selected.map { model.isDeletionAllowed(for: $0.reference.sourceLocationID) } ?? false,
+                    close: { model.selectedAppInventoryID = nil },
                     quickLook: model.quickLookSelected,
                     reveal: revealSelected,
                     open: openSelected,
@@ -27,7 +28,6 @@ struct AppsWorkspaceView: View {
                     move: moveSelected,
                     trash: trashSelected
                 )
-                .frame(width: 320)
             }
         }
         .background(DiskVisualStyle.canvas)
@@ -87,6 +87,7 @@ struct AppsWorkspaceView: View {
                         }
                     }
                 }
+                .diskScrollChrome()
             }
         }
     }
@@ -140,6 +141,7 @@ private struct AppInspector: View {
     let item: AppInventoryItem?
     let metric: SizeMetric
     let deletionAllowed: Bool
+    let close: () -> Void
     let quickLook: () -> Void
     let reveal: () -> Void
     let open: () -> Void
@@ -157,6 +159,15 @@ private struct AppInspector: View {
                                 Text(item.displayName).font(.title3.weight(.semibold)).lineLimit(3)
                                 Text(item.version.map { "Version \($0)" } ?? "Version unavailable").font(.caption).foregroundStyle(.secondary)
                             }
+                            Spacer(minLength: 8)
+                            Button(action: close) {
+                                Image(systemName: "xmark")
+                                    .font(.caption.weight(.semibold))
+                                    .frame(width: 26, height: 26)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Close inspector")
+                            .accessibilityLabel("Close inspector")
                         }
                         VStack(spacing: 8) {
                             metricRow("Source", item.sourceName)
@@ -174,9 +185,10 @@ private struct AppInspector: View {
                         }
                     }.padding(20)
                 }
+                .diskScrollChrome()
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "app.badge.checkmark").font(.title2).foregroundStyle(DiskVisualStyle.accent)
+                    Image(systemName: "app.badge.checkmark").font(.title2).foregroundStyle(DiskVisualStyle.iconAccent)
                     Text("Select an application").font(.subheadline.weight(.semibold))
                     Text("Size, source, snapshot age, and source-aware actions appear here.").font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(22)

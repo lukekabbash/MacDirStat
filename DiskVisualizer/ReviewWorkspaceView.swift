@@ -25,20 +25,21 @@ struct ReviewWorkspaceView: View {
             .padding(.horizontal, 18).frame(height: 54)
             .background(DiskVisualStyle.contentSurface.opacity(0.58))
 
-            HStack(spacing: 0) {
+            ContextualInspectorSplit(isPresented: selected != nil) {
                 reviewList
-                Rectangle().fill(DiskVisualStyle.hairline).frame(width: 1)
+            } inspector: {
                 ReviewInspector(
                     item: selected,
                     state: selected.map(model.reviewState(for:)),
                     sourceName: selected.map { model.sourceName(for: $0.sourceLocationID) },
                     metric: model.sizeMetric,
+                    close: { model.selectedReviewItemID = nil },
                     quickLook: model.quickLookSelected,
                     reveal: { selected.map { CleanupService().revealInFinder(path: $0.path) } },
                     remove: { if let selected { model.removeFromReview(selected.id) } },
                     move: { if let selected { requestMove(selected.sourceLocationID, selected.path, selected.name, selected.isPackage && selected.path.lowercased().hasSuffix(".app")) } },
                     trash: { if let selected { requestTrash(selected.sourceLocationID, selected.path, selected.name, selected.isPackage && selected.path.lowercased().hasSuffix(".app")) } }
-                ).frame(width: 320)
+                )
             }
         }
         .background(DiskVisualStyle.canvas)
@@ -70,7 +71,7 @@ struct ReviewWorkspaceView: View {
                             Button { model.selectedReviewItemID = item.id } label: {
                                 HStack(spacing: 10) {
                                     HStack(spacing: 8) {
-                                        Image(systemName: item.kind == .directory ? "folder.fill" : item.isPackage ? "shippingbox.fill" : "doc.fill").foregroundStyle(item.kind == .file ? .secondary : DiskVisualStyle.accentStrong).frame(width: 18)
+                                        Image(systemName: item.kind == .directory ? "folder.fill" : item.isPackage ? "shippingbox.fill" : "doc.fill").foregroundStyle(item.kind == .file ? .secondary : DiskVisualStyle.iconAccent).frame(width: 18)
                                         Text(item.name).font(.subheadline.weight(.medium)).lineLimit(1)
                                     }.frame(maxWidth: .infinity, alignment: .leading)
                                     Text(StoragePresentation.bytes(item.size(for: model.sizeMetric))).font(.caption.monospacedDigit()).frame(width: 90, alignment: .trailing)
@@ -83,6 +84,7 @@ struct ReviewWorkspaceView: View {
                         }
                     }
                 }
+                .diskScrollChrome()
             }
         }
     }
@@ -113,6 +115,7 @@ private struct ReviewInspector: View {
     let state: ReviewItemState?
     let sourceName: String?
     let metric: SizeMetric
+    let close: () -> Void
     let quickLook: () -> Void
     let reveal: () -> Void
     let remove: () -> Void
@@ -124,9 +127,20 @@ private struct ReviewInspector: View {
             if let item, let state {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 19) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.name).font(.title3.weight(.semibold)).lineLimit(3)
-                            ReviewStateLabel(state: state)
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(item.name).font(.title3.weight(.semibold)).lineLimit(3)
+                                ReviewStateLabel(state: state)
+                            }
+                            Spacer(minLength: 8)
+                            Button(action: close) {
+                                Image(systemName: "xmark")
+                                    .font(.caption.weight(.semibold))
+                                    .frame(width: 26, height: 26)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Close inspector")
+                            .accessibilityLabel("Close inspector")
                         }
                         VStack(spacing: 8) {
                             row("Source", sourceName ?? "Unavailable")
@@ -146,9 +160,10 @@ private struct ReviewInspector: View {
                         }
                     }.padding(20)
                 }
+                .diskScrollChrome()
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "checklist").font(.title2).foregroundStyle(DiskVisualStyle.accent)
+                    Image(systemName: "checklist").font(.title2).foregroundStyle(DiskVisualStyle.iconAccent)
                     Text("Select a review item").font(.subheadline.weight(.semibold))
                     Text("Current source, snapshot state, and conservative actions appear here.").font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).padding(22)

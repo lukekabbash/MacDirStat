@@ -47,14 +47,18 @@ enum DiskThemeCatalog {
                     available: 0x3B7850, attention: 0x916814, neutral: 0x68717D,
                     canvas: 0xF3F1EC, rail: 0xE8E8E4, panel: 0xF8F7F3,
                     layer: 0xFCFBF8, inspector: 0xECEBE6,
-                    border: 0xD7D8D6, borderStrong: 0xA8ADB2, danger: 0xA6504B
+                    border: 0xD7D8D6, borderStrong: 0xA8ADB2, danger: 0xA6504B,
+                    interactionAccent: 0x315A7D, interactionStrong: 0x122638,
+                    controlAccent: 0xA6504B, iconAccent: 0xA6504B
                 ),
                 dark: DiskThemeVariant(
                     accent: 0x83A9C8, accentStrong: 0xB3CCDE,
                     available: 0x78B389, attention: 0xD0A65A, neutral: 0x969CA4,
                     canvas: 0x17191D, rail: 0x202126, panel: 0x24262B,
                     layer: 0x2D3036, inspector: 0x1C1E22,
-                    border: 0x34373C, borderStrong: 0x5E636A, danger: 0xD27B75
+                    border: 0x34373C, borderStrong: 0x5E636A, danger: 0xD27B75,
+                    interactionAccent: 0x83A9C8, interactionStrong: 0xB3CCDE,
+                    controlAccent: 0xD27B75, iconAccent: 0xD27B75
                 )
             )
         case .graphite:

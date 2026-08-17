@@ -5,6 +5,7 @@ import Treemap
 
 struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject private var model: AppModel
     @StateObject private var treemapBridge = TreemapBridge()
     @State private var breadcrumb: [NodeID] = [.root]
@@ -25,8 +26,8 @@ struct ContentView: View {
             destinationCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minWidth: 1_120, minHeight: 680)
-        .tint(DiskVisualStyle.accent)
+        .frame(minWidth: 1_140, minHeight: 680)
+        .tint(DiskVisualStyle.interactionAccent)
         .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: model.appDestination)
         .toolbar { toolbar }
         .sheet(isPresented: $model.showOnboarding) {
@@ -172,69 +173,63 @@ struct ContentView: View {
     }
 
     private func workspace(session: ScanSession) -> some View {
-        HStack(spacing: 0) {
-            Group {
-                switch model.dashboardMode {
-                case .map:
-                    treemapPane(session: session)
-                case .overview:
-                    StorageInsightsView(
-                        session: session,
-                        metric: model.sizeMetric,
-                        grouping: $model.overviewGrouping,
-                        groups: model.overviewGroups,
-                        largestNodeIDs: model.overviewLargestNodeIDs,
-                        isPreparing: model.isPreparingOverview,
-                        selectedNodeID: model.selectedNodeID,
-                        selectedGroupID: model.selectedOverviewGroupID,
-                        onSelectNode: selectNode,
-                        onSelectGroup: selectOverviewGroup
-                    )
-                }
-            }
-            .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-            inspectorColumn(session: session)
-                .frame(width: 320)
-                .frame(maxHeight: .infinity)
-        }
+        WorkspaceSplitView(
+            session: session,
+            bridge: treemapBridge,
+            mapCanvas: { treemapPane(session: session) },
+            overviewCanvas: { overviewPane(session: session) },
+            inspectorContent: { target in inspectorColumn(session: session, target: target) }
+        )
     }
 
-    /// The inspector is permanently reserved so selecting a block changes
-    /// information, never the geometry under the pointer.
+    private func overviewPane(session: ScanSession) -> some View {
+        StorageInsightsView(
+            session: session,
+            sessionRevision: model.sessionRevision,
+            metric: model.sizeMetric,
+            grouping: $model.overviewGrouping,
+            groups: model.overviewGroups,
+            largestNodeIDs: model.overviewLargestNodeIDs,
+            isPreparing: model.isPreparingOverview,
+            selectedNodeID: model.selectedNodeID,
+            selectedGroupID: model.selectedOverviewGroupID,
+            onSelectNode: selectNode,
+            onSelectGroup: selectOverviewGroup
+        )
+    }
+
     @ViewBuilder
-    private func inspectorColumn(session: ScanSession) -> some View {
-        if model.dashboardMode == .overview,
-           let selectedGroupID = model.selectedOverviewGroupID,
-           let selectedGroup = model.overviewGroups.first(where: { $0.id == selectedGroupID }) {
-            StorageGroupInspectorView(
-                session: session,
-                item: selectedGroup,
-                grouping: model.overviewGrouping,
-                metric: model.sizeMetric,
-                largestNodeIDs: model.overviewGroupLargestNodeIDs,
-                isPreparing: model.isPreparingOverviewGroup,
-                close: { model.selectOverviewGroup(nil) },
-                selectNode: { selectNode($0) }
-            )
-        } else if let selectedID = model.selectedNodeID,
-                  session.node(id: selectedID) != nil {
-            StorageInspectorView(
-                session: session,
-                selectedNodeID: selectedID,
-                metric: model.sizeMetric,
-                cleanupControlsEnabled: model.cleanupControlsEnabled,
-                close: { selectNode(nil) },
-                quickLook: { _ in model.quickLookSelected() },
-                addToReview: model.addSelectedNodeToReview,
-                reveal: { CleanupService().revealInFinder(path: $0) },
-                open: { CleanupService().openFile(path: $0) },
-                move: requestMove,
-                trash: requestTrash
-            )
-        } else {
-            InspectorPlaceholderView(mode: model.dashboardMode)
+    private func inspectorColumn(session: ScanSession, target: WorkspaceInspectorTarget) -> some View {
+        switch target {
+        case let .overviewGroup(selectedGroupID):
+            if let selectedGroup = model.overviewGroups.first(where: { $0.id == selectedGroupID }) {
+                StorageGroupInspectorView(
+                    session: session,
+                    item: selectedGroup,
+                    grouping: model.overviewGrouping,
+                    metric: model.sizeMetric,
+                    largestNodeIDs: model.overviewGroupLargestNodeIDs,
+                    isPreparing: model.isPreparingOverviewGroup,
+                    close: closeOverviewInspector,
+                    selectNode: { selectNode($0) }
+                )
+            }
+        case let .node(selectedID):
+            if session.node(id: selectedID) != nil {
+                StorageInspectorView(
+                    session: session,
+                    selectedNodeID: selectedID,
+                    metric: model.sizeMetric,
+                    cleanupControlsEnabled: model.cleanupControlsEnabled,
+                    close: { selectNode(nil) },
+                    quickLook: { _ in model.quickLookSelected() },
+                    addToReview: model.addSelectedNodeToReview,
+                    reveal: { CleanupService().revealInFinder(path: $0) },
+                    open: { CleanupService().openFile(path: $0) },
+                    move: requestMove,
+                    trash: requestTrash
+                )
+            }
         }
     }
 
@@ -248,12 +243,30 @@ struct ContentView: View {
                 capacityContext: treemapCapacityContext(session: session),
                 showsCapacityContext: model.showFreeSpaceInMap,
                 selectedNodeID: model.selectedNodeID,
+                renderTheme: DiskVisualStyle.renderTheme(
+                    for: model.themeID,
+                    dark: colorScheme == .dark
+                ),
+                animatesMetricChanges: !reduceMotion,
                 bridge: treemapBridge,
                 onSelectionChange: selectNode,
                 onZoomChange: model.focus,
                 onBreadcrumbChange: { breadcrumb = $0 },
                 onHoverChange: { model.hoveredNodeID = $0 }
             )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Storage map for \(session.rootDisplayName)")
+            .accessibilityValue(mapAccessibilityValue(in: session))
+            .accessibilityHint("Use the largest-items list to select a file, or use Open selected folder and Zoom out to navigate layers.")
+            .accessibilityAction(named: "Open selected folder") {
+                guard let selectedNodeID = model.selectedNodeID,
+                      session.node(id: selectedNodeID)?.childCount ?? 0 > 0
+                else { return }
+                treemapBridge.zoomInto(selectedNodeID)
+            }
+            .accessibilityAction(named: "Zoom out") {
+                treemapBridge.zoomOut()
+            }
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .padding(.horizontal, 10)
             .padding(.top, 10)
@@ -292,15 +305,39 @@ struct ContentView: View {
         )
     }
 
+    private func mapAccessibilityValue(in session: ScanSession) -> String {
+        let scope = session.node(id: model.focusedNodeID)?.name ?? session.rootDisplayName
+        let selection: String
+        if let selectedNodeID = model.selectedNodeID,
+           let node = session.node(id: selectedNodeID) {
+            selection = " Selected \(node.name), \(StoragePresentation.bytes(node.size(for: model.sizeMetric)))."
+        } else {
+            selection = " No item selected."
+        }
+        return "\(StoragePresentation.label(for: model.sizeMetric)) sizes, colored by \(model.treemapColorMode.displayName.lowercased()), focused on \(scope).\(selection)"
+    }
+
     private func selectNode(_ id: NodeID?) {
-        withAnimation(reduceMotion ? nil : DiskVisualStyle.motion) {
-            model.selectNode(id)
+        if model.dashboardMode == .map {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { model.selectNode(id) }
+        } else {
+            withAnimation(reduceMotion ? nil : DiskVisualStyle.contentMotion) {
+                model.selectNode(id)
+            }
         }
     }
 
     private func selectOverviewGroup(_ item: StorageBreakdownItem) {
-        withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+        withAnimation(reduceMotion ? nil : DiskVisualStyle.contentMotion) {
             model.selectOverviewGroup(item.id)
+        }
+    }
+
+    private func closeOverviewInspector() {
+        withAnimation(reduceMotion ? nil : DiskVisualStyle.contentMotion) {
+            model.selectOverviewGroup(nil)
         }
     }
 

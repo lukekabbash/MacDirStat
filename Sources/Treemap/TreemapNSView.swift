@@ -1,6 +1,7 @@
 import AppKit
 import Core
 import Foundation
+import QuartzCore
 
 /// High-throughput treemap surface. The static mosaic is cached; pointer and
 /// selection states redraw only their small overlays.
@@ -19,8 +20,20 @@ public final class TreemapNSView: NSView {
     }
 
     public var metric: SizeMetric = .allocated {
-        didSet { if oldValue != metric { rebuildTiles() } }
+        didSet {
+            guard oldValue != metric else { return }
+            if animatesMetricChanges {
+                let transition = CATransition()
+                transition.type = .fade
+                transition.duration = 0.16
+                transition.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                layer?.add(transition, forKey: "metric-crossfade")
+            }
+            rebuildTiles()
+        }
     }
+
+    public var animatesMetricChanges = true
 
     public var colorMode: TreemapColorMode = .fileCategory {
         didSet { if oldValue != colorMode { invalidateBaseImage() } }
@@ -32,6 +45,13 @@ public final class TreemapNSView: NSView {
 
     public var showsCapacityContext = false {
         didSet { if oldValue != showsCapacityContext { rebuildTiles() } }
+    }
+
+    public var renderTheme: TreemapRenderTheme = .system {
+        didSet {
+            guard oldValue.token != renderTheme.token else { return }
+            invalidateBaseImage()
+        }
     }
 
     /// Zoom stack: first is always `.root`.
@@ -251,7 +271,7 @@ public final class TreemapNSView: NSView {
     private func renderBaseImage(session: ScanSession, size: NSSize) -> NSImage {
         NSImage(size: size, flipped: true) { [weak self] imageBounds in
             guard let self else { return false }
-            TreemapColorPalette.canvasBackground().setFill()
+            self.renderTheme.canvas.setFill()
             imageBounds.fill()
 
             for tile in self.tiles {
@@ -287,20 +307,20 @@ public final class TreemapNSView: NSView {
                 ending: NSColor.black.withAlphaComponent(0.075)
             )?.draw(in: tileRect, angle: -90)
             NSGraphicsContext.restoreGraphicsState()
-            TreemapColorPalette.strokeColor().setStroke()
+            renderTheme.tileStroke.setStroke()
             path.lineWidth = tile.depth < 2 ? 0.55 : 0.35
             path.stroke()
         case .freeSpace:
-            TreemapColorPalette.availableFill().setFill()
+            renderTheme.availableFill.setFill()
             path.fill()
-            TreemapColorPalette.availableStroke().setStroke()
+            renderTheme.availableStroke.setStroke()
             path.lineWidth = 1
             path.stroke()
             drawSyntheticLabel(title: "Available", value: capacityContext?.available ?? 0, in: rect)
         case .usedOutsideScan:
-            NSColor.tertiaryLabelColor.withAlphaComponent(0.13).setFill()
+            renderTheme.neutralFill.setFill()
             path.fill()
-            NSColor.separatorColor.withAlphaComponent(0.7).setStroke()
+            renderTheme.neutralStroke.setStroke()
             path.lineWidth = 1
             path.stroke()
             drawSyntheticLabel(title: "Used outside this scan", value: capacityContext?.usedOutsideScan ?? 0, in: rect)
@@ -313,13 +333,13 @@ public final class TreemapNSView: NSView {
         let radius = min(1.25, min(tileRect.width, tileRect.height) * 0.12)
         let path = NSBezierPath(roundedRect: tileRect, xRadius: radius, yRadius: radius)
         if selected {
-            TreemapColorPalette.selectionOverlay().setFill()
+            renderTheme.selectionFill.setFill()
             path.fill()
-            TreemapColorPalette.selectionStroke().setStroke()
+            renderTheme.selectionStroke.setStroke()
             path.lineWidth = 2
             path.stroke()
         } else {
-            TreemapColorPalette.hoverOverlay().setFill()
+            renderTheme.hoverFill.setFill()
             path.fill()
         }
     }

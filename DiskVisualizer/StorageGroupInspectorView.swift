@@ -36,6 +36,7 @@ struct StorageGroupInspectorView: View {
                 .padding(.horizontal, 20)
                 .padding(.vertical, 20)
             }
+            .diskScrollChrome()
         }
         .background(DiskVisualStyle.inspector)
     }
@@ -139,7 +140,7 @@ struct StorageGroupInspectorView: View {
         if let category = item.category {
             return Color(nsColor: TreemapColorPalette.color(for: category))
         }
-        return DiskVisualStyle.accent
+        return DiskVisualStyle.interactionAccent
     }
 
     private var groupDescription: String {

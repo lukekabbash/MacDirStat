@@ -20,20 +20,29 @@ struct SettingsCanvas: View {
             .padding(.bottom, 72)
             .frame(maxWidth: .infinity, alignment: .top)
         }
+        .diskScrollChrome()
         .background(DiskVisualStyle.canvas)
         .animation(reduceMotion ? nil : DiskVisualStyle.themeMotion, value: model.themeID)
     }
 }
 
 private struct SettingsPageHeader: View {
+    @EnvironmentObject private var model: AppModel
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Settings")
-                .font(.system(size: 24, weight: .semibold))
-                .tracking(-0.35)
-            Text("Appearance, scan behavior, and source-specific deletion permissions.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Settings")
+                    .font(.system(size: 24, weight: .semibold))
+                    .tracking(-0.35)
+                Text("Appearance, scan behavior, and source-specific deletion permissions.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 20)
+            ThemedAppMark(theme: model.themeID, size: 36)
+                .contentTransition(.opacity)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -69,7 +78,7 @@ private struct AppearanceSettingsSection: View {
                 }
 
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 182, maximum: 250), spacing: 8)],
+                    columns: [GridItem(.adaptive(minimum: 204, maximum: 250), spacing: 8)],
                     spacing: 8
                 ) {
                     ForEach(DiskThemeID.settingsOrder) { theme in
@@ -253,13 +262,14 @@ private struct SettingsToggleRow: View {
                 Toggle(title, isOn: $isOn)
                     .labelsHidden()
                     .toggleStyle(.switch)
-                    .tint(DiskVisualStyle.accent)
+                    .tint(DiskVisualStyle.controlAccent)
             }
         }
     }
 }
 
 private struct InlineChoice<Item: Hashable>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let choices: [Item]
     @Binding var selection: Item
     let label: (Item) -> String
@@ -269,11 +279,11 @@ private struct InlineChoice<Item: Hashable>: View {
         HStack(spacing: 2) {
             ForEach(choices, id: \.self) { item in
                 Button {
-                    withAnimation(DiskVisualStyle.selectionMotion) { selection = item }
+                    withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) { selection = item }
                 } label: {
                     Text(label(item))
                         .font(.caption.weight(.medium))
-                        .foregroundStyle(selection == item ? Color.primary : Color.secondary)
+                        .foregroundStyle(selection == item ? DiskVisualStyle.interactionStrong : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 27)
                         .background {
@@ -286,6 +296,8 @@ private struct InlineChoice<Item: Hashable>: View {
                         }
                 }
                 .buttonStyle(.plain)
+                .accessibilityValue(selection == item ? "Selected" : "Not selected")
+                .accessibilityAddTraits(selection == item ? .isSelected : [])
             }
         }
         .padding(2)
@@ -298,6 +310,7 @@ private struct InlineChoice<Item: Hashable>: View {
 }
 
 private struct ThemeChoiceCard: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let theme: DiskThemeID
     let isSelected: Bool
     let action: () -> Void
@@ -305,9 +318,9 @@ private struct ThemeChoiceCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ThemeSwatch(theme: theme, dark: theme.previewIsDark)
-                    .frame(width: 52, height: 34)
+                    .frame(width: 50, height: 34)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(theme.displayName)
@@ -319,10 +332,20 @@ private struct ThemeChoiceCard: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "checkmark")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(DiskVisualStyle.accentStrong)
-                    .opacity(isSelected ? 1 : 0)
+                ZStack(alignment: .bottomTrailing) {
+                    ThemedAppMark(theme: theme, dark: theme.previewIsDark, size: 24)
+                        .accessibilityHidden(true)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 10, weight: .bold))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(DiskVisualStyle.iconAccent, DiskVisualStyle.raisedSurface)
+                            .offset(x: 2, y: 2)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .frame(width: 26, height: 26)
             }
             .padding(.horizontal, 8)
             .frame(height: 52)
@@ -334,16 +357,18 @@ private struct ThemeChoiceCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: DiskVisualStyle.rowRadius, style: .continuous)
                     .stroke(
-                        isSelected ? DiskVisualStyle.accent.opacity(0.48) : DiskVisualStyle.hairline,
+                        isSelected ? DiskVisualStyle.interactionAccent.opacity(0.48) : DiskVisualStyle.hairline,
                         lineWidth: 1
                     )
             }
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
-        .animation(DiskVisualStyle.motion, value: isHovered)
-        .animation(DiskVisualStyle.settleMotion, value: isSelected)
+        .animation(reduceMotion ? nil : DiskVisualStyle.motion, value: isHovered)
+        .animation(reduceMotion ? nil : DiskVisualStyle.settleMotion, value: isSelected)
+        .accessibilityLabel("\(theme.displayName) theme")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityHint("Applies this theme to the workspace")
     }
 }
 
@@ -352,31 +377,31 @@ private struct ThemeSwatch: View {
     let dark: Bool
 
     var body: some View {
-        let colors = DiskVisualStyle.previewColors(for: theme, dark: dark)
+        let palette = DiskVisualStyle.previewPalette(for: theme, dark: dark)
         ZStack(alignment: .leading) {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(colors[0])
+                .fill(palette.canvas)
             Rectangle()
-                .fill(colors[1])
+                .fill(palette.rail)
                 .frame(width: 14)
             RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(colors[2])
+                .fill(palette.panel)
                 .padding(.leading, 19)
                 .padding(.trailing, 5)
                 .padding(.vertical, 5)
             Capsule()
-                .fill(colors[3])
+                .fill(palette.interactionAccent)
                 .frame(width: 15, height: 3)
                 .offset(x: 29, y: 9)
             Circle()
-                .fill(colors[4])
+                .fill(palette.controlAccent)
                 .frame(width: 5, height: 5)
                 .offset(x: 22, y: -8)
         }
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+                .stroke(palette.border, lineWidth: 1)
         }
         .accessibilityHidden(true)
     }

@@ -131,7 +131,7 @@ struct StorageExplorerSidebar: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
-            .tint(DiskVisualStyle.accent)
+            .tint(DiskVisualStyle.controlAccent)
             .disabled(activeRoot == nil)
             .help(session == nil ? "Start mapping the selected location" : "Replace this snapshot with a new scan")
         }
@@ -189,6 +189,7 @@ struct StorageExplorerSidebar: View {
                         .padding(.horizontal, 6)
                         .padding(.bottom, 8)
                     }
+                    .diskScrollChrome()
                 }
             }
             .frame(maxHeight: .infinity)
@@ -290,7 +291,7 @@ private struct SidebarIdleState: View {
         VStack(spacing: 10) {
             Image(systemName: systemImage)
                 .font(.system(size: 29, weight: .regular))
-                .foregroundStyle(DiskVisualStyle.accent)
+                .foregroundStyle(DiskVisualStyle.iconAccent)
             Text(title)
                 .font(.title3.weight(.semibold))
             Text(message)
@@ -341,7 +342,7 @@ private struct SidebarScanActivity: View {
         VStack(alignment: .leading, spacing: 5) {
             ProgressView(value: activity.fractionCompleted ?? 0)
                 .progressViewStyle(.linear)
-                .tint(DiskVisualStyle.accent)
+                .tint(DiskVisualStyle.interactionAccent)
 
             HStack(spacing: 5) {
                 Text(activity.phase.displayName)
@@ -395,7 +396,7 @@ private struct StorageExplorerRow: View {
                         .font(.caption)
                         .foregroundStyle(
                             row.node.kind == .directory
-                                ? DiskVisualStyle.accentStrong
+                                ? DiskVisualStyle.iconAccent
                                 : Color(nsColor: TreemapColorPalette.color(forFileTypeKey: StorageFileType.key(for: row.node)))
                         )
                         .frame(width: 17)
@@ -417,7 +418,7 @@ private struct StorageExplorerRow: View {
                         .fill(Color.primary.opacity(0.07))
                         .overlay(alignment: .leading) {
                             Capsule()
-                                .fill((isSelected ? DiskVisualStyle.accent : Color.secondary).opacity(0.62))
+                                .fill((isSelected ? DiskVisualStyle.interactionAccent : Color.secondary).opacity(0.62))
                                 .frame(width: proxy.size.width * row.relativeFraction)
                         }
                 }
@@ -442,6 +443,7 @@ private struct StorageExplorerRow: View {
 }
 
 private struct QuietSnapshotSearchField: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var text: String
     @FocusState private var isFocused: Bool
 
@@ -449,7 +451,7 @@ private struct QuietSnapshotSearchField: View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
                 .font(.caption)
-                .foregroundStyle(isFocused ? Color.primary : Color.secondary)
+                .foregroundStyle(isFocused ? DiskVisualStyle.interactionStrong : Color.secondary)
 
             TextField("Search this snapshot", text: $text)
                 .textFieldStyle(.plain)
@@ -477,12 +479,11 @@ private struct QuietSnapshotSearchField: View {
         .overlay {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .stroke(
-                    isFocused ? DiskVisualStyle.accent.opacity(0.42) : Color.clear,
+                    isFocused ? DiskVisualStyle.interactionAccent.opacity(0.42) : Color.clear,
                     lineWidth: 1
                 )
         }
-        .shadow(color: isFocused ? DiskVisualStyle.accent.opacity(0.10) : .clear, radius: 0, x: 0, y: 0)
-        .animation(DiskVisualStyle.motion, value: isFocused)
+        .animation(reduceMotion ? nil : DiskVisualStyle.motion, value: isFocused)
     }
 }
 

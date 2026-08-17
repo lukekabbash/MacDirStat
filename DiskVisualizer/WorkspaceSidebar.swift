@@ -36,10 +36,7 @@ struct WorkspaceSidebar: View {
 
     private var brand: some View {
         HStack(spacing: 10) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: 30, height: 30)
+            ThemedAppMark(theme: model.themeID, size: 30)
                 .accessibilityHidden(true)
             Text("Mac Directory Statistics")
                 .font(.subheadline.weight(.semibold))
@@ -143,7 +140,7 @@ struct WorkspaceSidebar: View {
                     .padding(.horizontal, 7)
                 }
                 .frame(maxHeight: model.appDestination == .scan ? 176 : .infinity)
-                .thinSidebarScroller()
+                .diskScrollChrome()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -240,7 +237,7 @@ struct WorkspaceSidebar: View {
                         }
                         .padding(.horizontal, 7)
                     }
-                    .thinSidebarScroller()
+                    .diskScrollChrome()
                 } else {
                     VStack(spacing: 7) {
                         Text(model.locationStatusText(location))

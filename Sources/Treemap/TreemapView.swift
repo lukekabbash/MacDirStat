@@ -10,6 +10,8 @@ public struct TreemapView: NSViewRepresentable {
     public var capacityContext: TreemapCapacityContext?
     public var showsCapacityContext: Bool
     public var selectedNodeID: NodeID?
+    public var renderTheme: TreemapRenderTheme
+    public var animatesMetricChanges: Bool
     public var bridge: TreemapBridge
     public var onSelectionChange: (NodeID?) -> Void
     public var onZoomChange: (NodeID) -> Void
@@ -24,6 +26,8 @@ public struct TreemapView: NSViewRepresentable {
         capacityContext: TreemapCapacityContext? = nil,
         showsCapacityContext: Bool = false,
         selectedNodeID: NodeID? = nil,
+        renderTheme: TreemapRenderTheme = .system,
+        animatesMetricChanges: Bool = true,
         bridge: TreemapBridge,
         onSelectionChange: @escaping (NodeID?) -> Void = { _ in },
         onZoomChange: @escaping (NodeID) -> Void = { _ in },
@@ -37,6 +41,8 @@ public struct TreemapView: NSViewRepresentable {
         self.capacityContext = capacityContext
         self.showsCapacityContext = showsCapacityContext
         self.selectedNodeID = selectedNodeID
+        self.renderTheme = renderTheme
+        self.animatesMetricChanges = animatesMetricChanges
         self.bridge = bridge
         self.onSelectionChange = onSelectionChange
         self.onZoomChange = onZoomChange
@@ -46,9 +52,11 @@ public struct TreemapView: NSViewRepresentable {
 
     public func makeNSView(context: Context) -> TreemapNSView {
         let v = TreemapNSView()
+        v.animatesMetricChanges = animatesMetricChanges
+        v.renderTheme = renderTheme
+        v.metric = metric
         v.session = session
         context.coordinator.sessionRevision = sessionRevision
-        v.metric = metric
         v.colorMode = colorMode
         v.capacityContext = capacityContext
         v.showsCapacityContext = showsCapacityContext
@@ -63,6 +71,8 @@ public struct TreemapView: NSViewRepresentable {
 
     public func updateNSView(_ nsView: TreemapNSView, context: Context) {
         bridge.view = nsView
+        nsView.animatesMetricChanges = animatesMetricChanges
+        nsView.renderTheme = renderTheme
         if context.coordinator.sessionRevision != sessionRevision {
             nsView.session = session
             context.coordinator.sessionRevision = sessionRevision
