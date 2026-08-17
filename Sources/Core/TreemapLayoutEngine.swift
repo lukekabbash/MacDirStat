@@ -149,7 +149,7 @@ public enum TreemapLayoutEngine {
     /// Squarifies arbitrary values and preserves their caller-facing indices.
     public static func weightedRects(
         values: [Double],
-        rect: NormalizedRect,
+        rect: NormalizedRect
     ) -> [WeightedRect] {
         let items = values.enumerated()
             .filter { $0.element > 0 && $0.element.isFinite }

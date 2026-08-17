@@ -188,7 +188,7 @@ public final class ScanEngine: @unchecked Sendable {
             totalNodes: { exactProgress.total },
             inventoryNodes: { exactProgress.inventory },
             progress: progress,
-            shouldCancel: shouldCancel,
+            shouldCancel: shouldCancel
         )
 
         if shouldCancel?() == true {
