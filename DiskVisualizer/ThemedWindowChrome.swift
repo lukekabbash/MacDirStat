@@ -38,6 +38,7 @@ final class ThemedWindowChromeProbe: NSView {
 
     private var appliedConfiguration: ThemedWindowChromeConfiguration?
     private var configurationGeneration = UUID()
+    private var hasFitInitialWindow = false
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -59,8 +60,11 @@ final class ThemedWindowChromeProbe: NSView {
                 for: configuration.theme,
                 dark: configuration.isDark
             )
+            window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = true
             window.titlebarSeparatorStyle = .none
+            window.toolbar?.showsBaselineSeparator = false
+            self.fitInitialWindowIfNeeded(window)
             self.appliedConfiguration = configuration
 
             // Applying native chrome while SwiftUI is constructing the first
@@ -72,5 +76,32 @@ final class ThemedWindowChromeProbe: NSView {
             window.viewsNeedDisplay = true
             window.displayIfNeeded()
         }
+    }
+
+    /// Restored window frames may have been saved on a taller display or by
+    /// an earlier build with a larger default. Fit once at launch so the
+    /// complete chrome and fixed sidebar footer remain visible without
+    /// interfering with later user-driven window placement.
+    private func fitInitialWindowIfNeeded(_ window: NSWindow) {
+        guard !hasFitInitialWindow,
+              let screen = window.screen ?? NSScreen.main
+        else { return }
+
+        hasFitInitialWindow = true
+        let visibleFrame = screen.visibleFrame.insetBy(dx: 8, dy: 8)
+        var fittedFrame = window.frame
+        fittedFrame.size.width = min(fittedFrame.width, visibleFrame.width)
+        fittedFrame.size.height = min(fittedFrame.height, visibleFrame.height)
+        fittedFrame.origin.x = min(
+            max(fittedFrame.minX, visibleFrame.minX),
+            visibleFrame.maxX - fittedFrame.width
+        )
+        fittedFrame.origin.y = min(
+            max(fittedFrame.minY, visibleFrame.minY),
+            visibleFrame.maxY - fittedFrame.height
+        )
+
+        guard fittedFrame != window.frame else { return }
+        window.setFrame(fittedFrame, display: true, animate: false)
     }
 }

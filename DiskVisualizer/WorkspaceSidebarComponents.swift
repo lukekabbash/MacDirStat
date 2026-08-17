@@ -236,20 +236,81 @@ struct NewLocationSheet: View {
 /// AppKit's native behavior while its scroller is configured once it exists.
 private final class ScrollChromeProbeView: NSView {
     var applyScrollChrome: ((NSScrollView) -> Void)?
+    private var isApplyingConfiguration = false
+    private weak var configuredScrollView: NSScrollView?
 
     override func viewDidMoveToSuperview() {
         super.viewDidMoveToSuperview()
         applyConfiguration()
+        scheduleConfiguration()
     }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         applyConfiguration()
+        scheduleConfiguration()
+    }
+
+    override func layout() {
+        super.layout()
+        applyConfiguration()
     }
 
     func applyConfiguration() {
-        guard let scrollView = enclosingScrollView else { return }
+        guard !isApplyingConfiguration,
+              let scrollView = resolvedScrollView()
+        else { return }
+        isApplyingConfiguration = true
+        defer { isApplyingConfiguration = false }
         applyScrollChrome?(scrollView)
+        configuredScrollView = scrollView
+    }
+
+    private func scheduleConfiguration() {
+        DispatchQueue.main.async { [weak self] in
+            self?.applyConfiguration()
+        }
+    }
+
+    private func resolvedScrollView() -> NSScrollView? {
+        if let enclosingScrollView {
+            return enclosingScrollView
+        }
+        if let configuredScrollView,
+           configuredScrollView.window === window {
+            return configuredScrollView
+        }
+        guard let contentView = window?.contentView else { return nil }
+
+        let probeCenter = convert(
+            NSPoint(x: bounds.midX, y: bounds.midY),
+            to: nil
+        )
+        return contentView
+            .descendantScrollViews()
+            .filter { scrollView in
+                guard !scrollView.isHidden, scrollView.window === window else { return false }
+                return scrollView.convert(scrollView.bounds, to: nil)
+                    .insetBy(dx: -2, dy: -2)
+                    .contains(probeCenter)
+            }
+            .min { lhs, rhs in
+                lhs.bounds.width * lhs.bounds.height < rhs.bounds.width * rhs.bounds.height
+            }
+    }
+}
+
+private extension NSView {
+    func descendantScrollViews() -> [NSScrollView] {
+        var matches: [NSScrollView] = []
+        var pending = subviews
+        while let view = pending.popLast() {
+            if let scrollView = view as? NSScrollView {
+                matches.append(scrollView)
+            }
+            pending.append(contentsOf: view.subviews)
+        }
+        return matches
     }
 }
 

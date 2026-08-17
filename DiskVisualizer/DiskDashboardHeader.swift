@@ -31,6 +31,16 @@ enum StoragePresentation {
 
 /// One compact orientation strip carries location, live scan state, totals,
 /// and the workspace view. The map remains the dominant visual surface.
+struct DashboardHeaderControls {
+    let isHistorical: Bool
+    let canReturnToCurrent: Bool
+    let canSaveSnapshot: Bool
+    let canZoomOut: Bool
+    let returnToCurrent: () -> Void
+    let saveSnapshot: () -> Void
+    let zoomOut: () -> Void
+}
+
 struct DiskDashboardHeader: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: ScanSession
@@ -40,7 +50,8 @@ struct DiskDashboardHeader: View {
     let statusLine: String
     @ObservedObject var scanTelemetry: ScanTelemetryState
     let breadcrumb: [NodeID]
-    let dashboardMode: DashboardMode
+    @Binding var dashboardMode: DashboardMode
+    let controls: DashboardHeaderControls
 
     private var currentSize: UInt64 {
         metric == .allocated ? session.rootTotalAllocated : session.rootTotalLogical
@@ -60,7 +71,19 @@ struct DiskDashboardHeader: View {
                 Spacer(minLength: 12)
 
                 headerReadout
-                    .frame(maxWidth: 430, alignment: .trailing)
+                    .frame(minWidth: 170, maxWidth: 360, alignment: .trailing)
+
+                DashboardToolbarControls(
+                    selection: $dashboardMode,
+                    isHistorical: controls.isHistorical,
+                    canReturnToCurrent: controls.canReturnToCurrent,
+                    canSaveSnapshot: controls.canSaveSnapshot,
+                    canZoomOut: controls.canZoomOut,
+                    returnToCurrent: controls.returnToCurrent,
+                    saveSnapshot: controls.saveSnapshot,
+                    zoomOut: controls.zoomOut
+                )
+                .layoutPriority(2)
             }
             .padding(.horizontal, 12)
             .frame(height: 43)
@@ -141,74 +164,92 @@ struct DiskDashboardHeader: View {
     }
 }
 
-/// Keeps workspace navigation and live snapshot state in the native toolbar,
-/// beside related snapshot actions rather than inside the data canvas.
+/// Keeps workspace navigation and snapshot actions in one restrained trailing
+/// header cluster, separate from scan status and native window controls.
 struct DashboardToolbarControls: View {
     @Binding var selection: DashboardMode
-    let isScanning: Bool
-    let isComplete: Bool
     let isHistorical: Bool
-    @ObservedObject var scanTelemetry: ScanTelemetryState
+    let canReturnToCurrent: Bool
+    let canSaveSnapshot: Bool
+    let canZoomOut: Bool
+    let returnToCurrent: () -> Void
+    let saveSnapshot: () -> Void
+    let zoomOut: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
-            DashboardModeControl(selection: $selection)
-                .frame(width: 166)
-            ScanStateBadge(
-                activity: isScanning ? scanTelemetry.activity : nil,
-                isComplete: isComplete,
-                isHistorical: isHistorical
-            )
-            .frame(width: 74, alignment: .trailing)
+            HStack(spacing: 2) {
+                DashboardToolbarModeButton(selection: $selection, mode: .map)
+                DashboardToolbarModeButton(selection: $selection, mode: .overview)
+            }
+
+            HStack(spacing: 2) {
+                if isHistorical {
+                    DashboardToolbarActionButton(
+                        title: "Current Scan",
+                        systemImage: "clock.arrow.circlepath",
+                        enabled: canReturnToCurrent,
+                        action: returnToCurrent
+                    )
+                }
+
+                DashboardToolbarActionButton(
+                    title: "Save Snapshot",
+                    systemImage: "camera",
+                    enabled: canSaveSnapshot,
+                    action: saveSnapshot
+                )
+
+                DashboardToolbarActionButton(
+                    title: "Zoom Out",
+                    systemImage: "arrow.up.left.and.arrow.down.right",
+                    enabled: canZoomOut,
+                    action: zoomOut
+                )
+            }
         }
+        .fixedSize()
     }
 }
 
-private struct DashboardModeControl: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+struct DashboardToolbarModeButton: View {
     @Binding var selection: DashboardMode
-    @Namespace private var selectionSurface
+    let mode: DashboardMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isHovered = false
+
+    private var isSelected: Bool { selection == mode }
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(DashboardMode.allCases, id: \.self) { mode in
-                Button {
-                    select(mode)
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
-                        Text(mode.displayName)
-                    }
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(selection == mode ? DiskVisualStyle.interactionStrong : Color.secondary)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 25)
-                        .contentShape(Rectangle())
-                        .background {
-                            if selection == mode {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                    .fill(DiskVisualStyle.raisedSurface)
-                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
-                                    .matchedGeometryEffect(id: "dashboard-mode", in: selectionSurface)
-                            }
-                        }
+        Button(action: select) {
+            HStack(spacing: 5) {
+                Image(systemName: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
+                Text(mode.displayName)
+            }
+            .font(.caption2.weight(isSelected ? .semibold : .medium))
+            .foregroundStyle(isSelected ? DiskVisualStyle.interactionStrong : Color.secondary)
+            .padding(.horizontal, 9)
+            .frame(height: 28)
+            .contentShape(Rectangle())
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(DiskVisualStyle.selection)
+                } else if isHovered {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(DiskVisualStyle.controlHover)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(mode.displayName)
-                .accessibilityValue(selection == mode ? "Selected" : "Not selected")
-                .accessibilityAddTraits(selection == mode ? .isSelected : [])
             }
         }
-        .padding(2)
-        .background(DiskVisualStyle.subtleSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(DiskVisualStyle.hairline, lineWidth: 1)
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(mode.displayName)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .onHover { isHovered = $0 }
     }
 
-    private func select(_ mode: DashboardMode) {
-        guard mode != selection else { return }
+    private func select() {
+        guard !isSelected else { return }
         if reduceMotion {
             selection = mode
         } else {
@@ -219,6 +260,32 @@ private struct DashboardModeControl: View {
     }
 }
 
+struct DashboardToolbarActionButton: View {
+    let title: String
+    let systemImage: String
+    let enabled: Bool
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .background {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(isHovered && enabled ? DiskVisualStyle.controlHover : Color.clear)
+                }
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(title)
+        .accessibilityLabel(title)
+        .onHover { isHovered = $0 }
+    }
+}
+
 private struct CompactScanActivity: View {
     let activity: ScanActivity
 
@@ -226,6 +293,13 @@ private struct CompactScanActivity: View {
         HStack(spacing: 6) {
             Text(activity.phase.displayName)
                 .fontWeight(.medium)
+            if let percentage = activity.percentageText {
+                Text(percentage)
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+                    .foregroundStyle(DiskVisualStyle.interactionStrong)
+                    .contentTransition(.numericText())
+            }
             Text("·")
                 .foregroundStyle(.tertiary)
             Text(activity.inspectedItems.formatted())
@@ -243,36 +317,6 @@ private struct CompactScanActivity: View {
         .font(.caption)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Scan progress")
-    }
-}
-
-private struct ScanStateBadge: View {
-    let activity: ScanActivity?
-    let isComplete: Bool
-    let isHistorical: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 6, height: 6)
-            Text(statusText)
-                .font(.caption2.weight(.semibold).monospacedDigit())
-                .contentTransition(.numericText())
-        }
-        .foregroundStyle(.secondary)
-        .accessibilityElement(children: .combine)
-    }
-
-    private var statusText: String {
-        if isHistorical { return "Saved" }
-        return activity?.percentageText ?? (activity == nil ? (isComplete ? "Current" : "Partial") : "0%")
-    }
-
-    private var statusColor: Color {
-        if isHistorical { return DiskVisualStyle.iconAccent }
-        if activity != nil { return DiskVisualStyle.interactionAccent }
-        return isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention
     }
 }
 
