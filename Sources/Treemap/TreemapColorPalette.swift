@@ -14,6 +14,65 @@ public enum TreemapColorMode: String, CaseIterable, Sendable {
     }
 }
 
+/// Theme-owned chrome for the native storage renderers. Category hues remain
+/// stable data encodings; these colors cover surfaces, boundaries, capacity,
+/// and interaction so same-appearance theme changes can update immediately.
+public struct TreemapRenderTheme {
+    public let token: String
+    public let canvas: NSColor
+    public let surface: NSColor
+    public let tileStroke: NSColor
+    public let selectionFill: NSColor
+    public let selectionStroke: NSColor
+    public let hoverFill: NSColor
+    public let availableFill: NSColor
+    public let availableStroke: NSColor
+    public let neutralFill: NSColor
+    public let neutralStroke: NSColor
+
+    public init(
+        token: String,
+        canvas: NSColor,
+        surface: NSColor,
+        tileStroke: NSColor,
+        selectionFill: NSColor,
+        selectionStroke: NSColor,
+        hoverFill: NSColor,
+        availableFill: NSColor,
+        availableStroke: NSColor,
+        neutralFill: NSColor,
+        neutralStroke: NSColor
+    ) {
+        self.token = token
+        self.canvas = canvas
+        self.surface = surface
+        self.tileStroke = tileStroke
+        self.selectionFill = selectionFill
+        self.selectionStroke = selectionStroke
+        self.hoverFill = hoverFill
+        self.availableFill = availableFill
+        self.availableStroke = availableStroke
+        self.neutralFill = neutralFill
+        self.neutralStroke = neutralStroke
+    }
+
+    public static var system: TreemapRenderTheme {
+        TreemapRenderTheme(
+            token: "system",
+            canvas: TreemapColorPalette.canvasBackground(),
+            surface: NSColor.windowBackgroundColor,
+            tileStroke: TreemapColorPalette.strokeColor(),
+            selectionFill: TreemapColorPalette.selectionOverlay(),
+            selectionStroke: TreemapColorPalette.selectionStroke(),
+            hoverFill: TreemapColorPalette.hoverOverlay(),
+            availableFill: TreemapColorPalette.availableFill(),
+            availableStroke: TreemapColorPalette.availableStroke(),
+            neutralFill: NSColor.tertiaryLabelColor.withAlphaComponent(0.13),
+            neutralStroke: NSColor.separatorColor.withAlphaComponent(0.7)
+        )
+    }
+}
+
 public enum TreemapColorPalette {
     public static func color(
         for node: FileNode,

@@ -10,6 +10,29 @@ struct LocationSnapshot: Sendable {
     let generation: UUID
 }
 
+/// Two complementary views of one scan snapshot. Summary answers broad
+/// category questions; Sunburst keeps the actual folder hierarchy visible.
+enum StorageOverviewPresentation: String, CaseIterable, Identifiable {
+    case summary
+    case sunburst
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .summary: return "Summary"
+        case .sunburst: return "Sunburst"
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .summary: return "chart.bar.xaxis"
+        case .sunburst: return "circle.hexagongrid"
+        }
+    }
+}
+
 enum AppInventoryScope: String, CaseIterable, Identifiable {
     case selectedLocation
     case allCompletedLocations

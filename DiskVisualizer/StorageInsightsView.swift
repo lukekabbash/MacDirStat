@@ -8,6 +8,7 @@ import Treemap
 struct StorageInsightsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let session: ScanSession
+    let sessionRevision: Int
     let metric: SizeMetric
     @Binding var grouping: StorageBreakdownGrouping
     let groups: [StorageBreakdownItem]
@@ -18,6 +19,8 @@ struct StorageInsightsView: View {
     let onSelectNode: (NodeID?) -> Void
     let onSelectGroup: (StorageBreakdownItem) -> Void
     @State private var chartsVisible = false
+    @State private var presentation: StorageOverviewPresentation = .summary
+    @State private var sunburstScopeNodeID: NodeID = .root
     @Namespace private var groupSelectionPill
 
     private var largestItems: [StorageReviewItem] {
@@ -29,29 +32,75 @@ struct StorageInsightsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if groups.isEmpty && isPreparing {
-                ProgressView("Preparing overview…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if groups.isEmpty {
-                ContentUnavailableView(
-                    "Nothing to chart",
-                    systemImage: "chart.bar.xaxis",
-                    description: Text("This snapshot does not contain measurable files or packages.")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        distributionSection
-                        largestItemsSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    presentationHeader
+
+                    Group {
+                        switch presentation {
+                        case .summary:
+                            summaryContent
+                        case .sunburst:
+                            StorageHierarchyView(
+                                session: session,
+                                sessionRevision: sessionRevision,
+                                metric: metric,
+                                selectedNodeID: selectedNodeID,
+                                scopeNodeID: $sunburstScopeNodeID,
+                                onSelectNode: onSelectNode
+                            )
+                        }
                     }
-                    .padding(22)
+                    .id(presentation)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 5)))
                 }
+                .padding(22)
             }
+            .diskScrollChrome()
         }
         .background(DiskVisualStyle.canvas)
         .onAppear { revealCharts() }
         .onChange(of: groups) { revealCharts() }
+        .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: presentation)
+    }
+
+    private var presentationHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(presentation == .summary ? "Storage summary" : "Sunburst hierarchy")
+                    .font(.title3.weight(.semibold))
+                Text(
+                    presentation == .summary
+                        ? "A precise category breakdown of this snapshot."
+                        : "Explore the actual folder layers in this snapshot."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 16)
+            OverviewPresentationControl(selection: $presentation)
+            .frame(width: 208)
+        }
+    }
+
+    @ViewBuilder
+    private var summaryContent: some View {
+        if groups.isEmpty && isPreparing {
+            ProgressView("Preparing summary…")
+                .frame(maxWidth: .infinity, minHeight: 310)
+        } else if groups.isEmpty {
+            ContentUnavailableView(
+                "Nothing to chart",
+                systemImage: "chart.bar.xaxis",
+                description: Text("This snapshot does not contain measurable files or packages.")
+            )
+            .frame(maxWidth: .infinity, minHeight: 310)
+        } else {
+            VStack(alignment: .leading, spacing: 28) {
+                distributionSection
+                largestItemsSection
+            }
+        }
     }
 
     private var distributionSection: some View {
@@ -171,6 +220,59 @@ private struct SectionHeading: View {
             Text(detail)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct OverviewPresentationControl: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var selection: StorageOverviewPresentation
+    @Namespace private var selectionSurface
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(StorageOverviewPresentation.allCases) { style in
+                Button {
+                    select(style)
+                } label: {
+                    Label(style.displayName, systemImage: style.symbolName)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(selection == style ? DiskVisualStyle.interactionStrong : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 25)
+                        .background {
+                            if selection == style {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(DiskVisualStyle.raisedSurface)
+                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                                    .matchedGeometryEffect(id: "overview-presentation", in: selectionSurface)
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(style.displayName)
+                .accessibilityValue(selection == style ? "Selected" : "Not selected")
+                .accessibilityAddTraits(selection == style ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(DiskVisualStyle.subtleSurface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Overview presentation")
+    }
+
+    private func select(_ style: StorageOverviewPresentation) {
+        guard style != selection else { return }
+        if reduceMotion {
+            selection = style
+        } else {
+            withAnimation(DiskVisualStyle.contentMotion) {
+                selection = style
+            }
         }
     }
 }

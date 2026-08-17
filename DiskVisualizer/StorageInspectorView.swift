@@ -1,8 +1,8 @@
 import Core
 import SwiftUI
 
-/// A contextual inspector for an explicit selection. Its parent presents it
-/// over the trailing edge so revealing detail never resizes the source view.
+/// A contextual inspector for an explicit selection. Its parent gives it a
+/// real trailing split only while detail is visible.
 struct StorageInspectorView: View {
     let session: ScanSession
     let selectedNodeID: NodeID
@@ -36,6 +36,7 @@ struct StorageInspectorView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 20)
                 }
+                .diskScrollChrome()
             }
         }
         .background(DiskVisualStyle.inspector)
@@ -45,7 +46,7 @@ struct StorageInspectorView: View {
         HStack(alignment: .top, spacing: 11) {
             Image(systemName: StoragePresentation.icon(for: node.kind))
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(node.kind == .file ? Color.secondary : DiskVisualStyle.accentStrong)
+                .foregroundStyle(node.kind == .file ? Color.secondary : DiskVisualStyle.iconAccent)
                 .frame(width: 34, height: 34)
                 .background(DiskVisualStyle.selection, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
@@ -96,7 +97,7 @@ struct StorageInspectorView: View {
                 DetailMetricRow(label: "Direct children", value: node.childCount.formatted())
             }
             ProgressView(value: rootSize == 0 ? 0 : Double(node.size(for: metric)) / Double(rootSize))
-                .tint(DiskVisualStyle.accent)
+                .tint(DiskVisualStyle.interactionAccent)
                 .accessibilityLabel("Share of scan")
         }
     }
@@ -111,7 +112,7 @@ struct StorageInspectorView: View {
                     if node.isPackage { TagPill(title: "Package", color: DiskVisualStyle.attention) }
                     if node.mayShareContent { TagPill(title: "Shared blocks possible", color: DiskVisualStyle.neutral) }
                     if node.isSparse { TagPill(title: "Sparse", color: DiskVisualStyle.available) }
-                    if node.isPurgeable { TagPill(title: "Purgeable", color: DiskVisualStyle.accent) }
+                    if node.isPurgeable { TagPill(title: "Purgeable", color: DiskVisualStyle.available) }
                 }
             }
         }

@@ -4,6 +4,7 @@ import SwiftUI
 /// working area; this proportional strip answers the separate question of how
 /// much physical capacity is currently available on the containing volume.
 struct VolumeSpaceContextView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let snapshot: VolumeSpaceSnapshot
     let scopeName: String
     let scopeAllocatedSize: UInt64
@@ -43,7 +44,7 @@ struct VolumeSpaceContextView: View {
                 .overlay {
                     Capsule().stroke(DiskVisualStyle.hairline, lineWidth: 1)
                 }
-                .animation(DiskVisualStyle.settleMotion, value: usedFraction)
+                .animation(reduceMotion ? nil : DiskVisualStyle.settleMotion, value: usedFraction)
             }
             .frame(height: 9)
             .accessibilityElement(children: .ignore)
