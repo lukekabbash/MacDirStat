@@ -15,6 +15,7 @@ struct StorageSunburstChart: NSViewRepresentable {
     let onSelectionChange: (NodeID?) -> Void
     let onDrillInto: (NodeID) -> Void
     let onNavigateBack: () -> Void
+    let contextMenuProvider: (NodeID) -> NSMenu?
 
     @AppStorage("themeID") private var themeID = DiskThemeID.softGlass.rawValue
     @Environment(\.colorScheme) private var colorScheme
@@ -48,6 +49,7 @@ struct StorageSunburstChart: NSViewRepresentable {
         view.onSelectionChange = onSelectionChange
         view.onDrillInto = onDrillInto
         view.onNavigateBack = onNavigateBack
+        view.contextMenuProvider = contextMenuProvider
     }
 }
 
@@ -74,6 +76,7 @@ final class StorageSunburstNSView: NSView {
     var onSelectionChange: ((NodeID?) -> Void)?
     var onDrillInto: ((NodeID) -> Void)?
     var onNavigateBack: (() -> Void)?
+    var contextMenuProvider: ((NodeID) -> NSMenu?)?
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -157,6 +160,7 @@ final class StorageSunburstNSView: NSView {
             rebuildStaticContentIfNeeded()
         }
         drawCachedBitmap()
+        drawCenterLabels()
 
         if pendingSizeRebuild == nil {
             drawInteractionOverlay()
@@ -167,10 +171,20 @@ final class StorageSunburstNSView: NSView {
         guard pendingSizeRebuild == nil else { return }
         window?.makeFirstResponder(self)
         let nodeID = hitNode(at: convert(event.locationInWindow, from: nil))
-        guard nodeID != selectedNodeID else { return }
-        selectedNodeID = nodeID
-        onSelectionChange?(nodeID)
-        needsDisplay = true
+        selectFromPointer(nodeID)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard pendingSizeRebuild == nil,
+              let nodeID = hitNode(at: convert(event.locationInWindow, from: nil)),
+              let contextMenuProvider
+        else { return nil }
+
+        window?.makeFirstResponder(self)
+        selectFromPointer(nodeID)
+        let menu = contextMenuProvider(nodeID)
+        menu?.appearance = window?.effectiveAppearance
+        return menu
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -331,21 +345,17 @@ final class StorageSunburstNSView: NSView {
             bitmapFormat: .alphaFirst,
             bytesPerRow: 0,
             bitsPerPixel: 0
-        ), let context = NSGraphicsContext(bitmapImageRep: bitmap)
-        else { return nil }
+        ) else { return nil }
 
+        // Establish the bitmap's point size before creating its context. This
+        // makes the eager cache render at backing resolution while preserving
+        // the same point-space geometry used by this flipped NSView.
         bitmap.size = bounds.size
+        guard let bitmapContext = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        let context = NSGraphicsContext(cgContext: bitmapContext.cgContext, flipped: true)
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current = context
-        let graphicsContext = context.cgContext
-        graphicsContext.saveGState()
-        defer { graphicsContext.restoreGState() }
-        // NSGraphicsContext already maps points to the bitmap's backing
-        // resolution. Only flip its point-space origin to match this view;
-        // applying the backing scale again would double-scale Retina output.
-        graphicsContext.translateBy(x: 0, y: bounds.height)
-        graphicsContext.scaleBy(x: 1, y: -1)
         context.imageInterpolation = .high
         context.shouldAntialias = true
 
@@ -354,7 +364,7 @@ final class StorageSunburstNSView: NSView {
         for geometry in geometryByNodeID.values {
             drawBaseArc(geometry)
         }
-        drawCenter(layout: layout)
+        drawCenterSurface(layout: layout)
 
         return bitmap
     }
@@ -362,10 +372,13 @@ final class StorageSunburstNSView: NSView {
     private func drawCachedBitmap() {
         guard let baseBitmap else { return }
         let sourceSize = baseBitmap.size
-        let scale = min(
-            bounds.width / max(1, sourceSize.width),
-            bounds.height / max(1, sourceSize.height)
-        )
+        // The wheel is sized by the canvas's shorter dimension. During a
+        // trailing-inspector resize, scaling against the full old width would
+        // make a wide chart briefly collapse even though its radial extent is
+        // unchanged. Preserve that extent and recenter the cached canvas.
+        let sourceExtent = max(1, min(sourceSize.width, sourceSize.height))
+        let destinationExtent = max(1, min(bounds.width, bounds.height))
+        let scale = destinationExtent / sourceExtent
         let destinationSize = CGSize(
             width: sourceSize.width * scale,
             height: sourceSize.height * scale
@@ -404,8 +417,7 @@ final class StorageSunburstNSView: NSView {
         path.stroke()
     }
 
-    private func drawCenter(layout: SunburstRenderLayout) {
-        guard let session, let projection else { return }
+    private func drawCenterSurface(layout: SunburstRenderLayout) {
         let centerRadius = max(0, layout.innerRadius - 5)
         let centerRect = CGRect(
             x: layout.center.x - centerRadius,
@@ -419,6 +431,18 @@ final class StorageSunburstNSView: NSView {
         renderTheme.tileStroke.setStroke()
         centerPath.lineWidth = 0.7
         centerPath.stroke()
+    }
+
+    /// AppKit's bitmap context has a different text orientation than this
+    /// flipped host view. Rendering the two lightweight labels here keeps
+    /// them upright and crisp while the expensive arc collection stays cached.
+    private func drawCenterLabels() {
+        guard let session, let projection else { return }
+        let layout = SunburstRenderLayout(
+            bounds: bounds,
+            deepestDepth: projection.deepestVisibleDepth
+        )
+        let centerRadius = max(0, layout.innerRadius - 5)
 
         let title = session.node(id: projection.rootID)?.name ?? session.rootDisplayName
         let total = ByteCountFormatter.string(
@@ -433,22 +457,53 @@ final class StorageSunburstNSView: NSView {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium),
             .foregroundColor: NSColor.secondaryLabelColor,
         ]
-        drawCentered(title, attributes: titleAttributes, at: CGPoint(x: layout.center.x, y: layout.center.y - 11), width: centerRadius * 1.5)
-        drawCentered(total, attributes: totalAttributes, at: CGPoint(x: layout.center.x, y: layout.center.y + 4), width: centerRadius * 1.5)
+        drawCentered(
+            truncatedCenterTitle(
+                title,
+                maximumWidth: centerRadius * 1.72,
+                attributes: titleAttributes
+            ),
+            attributes: titleAttributes,
+            at: CGPoint(x: layout.center.x, y: layout.center.y - 11)
+        )
+        drawCentered(
+            total,
+            attributes: totalAttributes,
+            at: CGPoint(x: layout.center.x, y: layout.center.y + 4)
+        )
     }
 
     private func drawCentered(
         _ string: String,
         attributes: [NSAttributedString.Key: Any],
-        at point: CGPoint,
-        width: CGFloat
+        at point: CGPoint
     ) {
         let text = string as NSString
         let size = text.size(withAttributes: attributes)
         text.draw(
-            at: CGPoint(x: point.x - min(width, size.width) / 2, y: point.y),
+            at: CGPoint(x: point.x - size.width / 2, y: point.y),
             withAttributes: attributes
         )
+    }
+
+    private func truncatedCenterTitle(
+        _ title: String,
+        maximumWidth: CGFloat,
+        attributes: [NSAttributedString.Key: Any]
+    ) -> String {
+        guard (title as NSString).size(withAttributes: attributes).width > maximumWidth else {
+            return title
+        }
+
+        var prefix = title
+        while !prefix.isEmpty {
+            prefix.removeLast()
+            let candidate = prefix + "…"
+            if (candidate as NSString).size(withAttributes: attributes).width <= maximumWidth {
+                return candidate
+            }
+        }
+        return "…"
     }
 
     /// The redraw path consists of the bitmap above plus this one lightweight
@@ -482,6 +537,13 @@ final class StorageSunburstNSView: NSView {
         guard nodeID != hoveredNodeID else { return }
         hoveredNodeID = nodeID
         toolTip = nodeID.flatMap(tooltip(for:))
+        needsDisplay = true
+    }
+
+    private func selectFromPointer(_ nodeID: NodeID?) {
+        guard nodeID != selectedNodeID else { return }
+        selectedNodeID = nodeID
+        onSelectionChange?(nodeID)
         needsDisplay = true
     }
 

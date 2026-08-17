@@ -5,7 +5,7 @@ public enum SizeMetric: String, Codable, Sendable, CaseIterable {
     case logical
 }
 
-public struct ScanOptions: Equatable, Sendable {
+public struct ScanOptions: Equatable, Sendable, Codable {
     public var metric: SizeMetric
     public var showHiddenFiles: Bool
     /// When true, directory entries marked as packages are not descended into.

@@ -189,21 +189,6 @@ struct DiskThemeDefinition {
     let dark: DiskThemeVariant
 }
 
-/// The compact palette used by previews and the runtime app mark. It exposes
-/// semantic colors rather than positional swatch indices, so future themes do
-/// not have to coordinate with individual view layouts.
-struct DiskThemePreviewPalette {
-    let canvas: Color
-    let rail: Color
-    let panel: Color
-    let layer: Color
-    let border: Color
-    let interactionAccent: Color
-    let controlAccent: Color
-    let iconAccent: Color
-    let available: Color
-}
-
 enum DiskVisualStyle {
     private enum Role {
         case accent, accentStrong
@@ -261,21 +246,6 @@ enum DiskVisualStyle {
     )
     static let themeMotion = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.18)
 
-    static func previewPalette(for theme: DiskThemeID, dark: Bool) -> DiskThemePreviewPalette {
-        let variant = dark ? theme.definition.dark : theme.definition.light
-        return DiskThemePreviewPalette(
-            canvas: color(hex: variant.canvas),
-            rail: color(hex: variant.rail),
-            panel: color(hex: variant.panel),
-            layer: color(hex: variant.layer),
-            border: color(hex: variant.borderStrong),
-            interactionAccent: color(hex: value(for: .interactionAccent, in: variant)),
-            controlAccent: color(hex: value(for: .controlAccent, in: variant)),
-            iconAccent: color(hex: value(for: .iconAccent, in: variant)),
-            available: color(hex: variant.available)
-        )
-    }
-
     static func renderTheme(for theme: DiskThemeID, dark: Bool) -> TreemapRenderTheme {
         let variant = dark ? theme.definition.dark : theme.definition.light
         let interaction = nsColor(hex: value(for: .interactionAccent, in: variant))
@@ -294,6 +264,11 @@ enum DiskVisualStyle {
             neutralFill: neutral.withAlphaComponent(0.13),
             neutralStroke: neutral.withAlphaComponent(0.66)
         )
+    }
+
+    static func windowChromeColor(for theme: DiskThemeID, dark: Bool) -> NSColor {
+        let variant = dark ? theme.definition.dark : theme.definition.light
+        return nsColor(hex: variant.rail)
     }
 
     private static func themed(_ role: Role) -> Color {
@@ -356,61 +331,39 @@ enum DiskVisualStyle {
     }
 }
 
-/// A small, runtime-rendered application mark that carries the active
-/// palette without changing the signed Dock and Finder icon asset.
-struct ThemedAppMark: View {
+/// Displays a purpose-made raster variant of the production application icon.
+/// The signed Dock icon remains stable while in-app identity follows the theme.
+struct ThemedAppIcon: View {
     let theme: DiskThemeID
-    var dark: Bool? = nil
     var size: CGFloat = 24
 
-    @Environment(\.colorScheme) private var colorScheme
-
-    private var usesDarkVariant: Bool {
-        dark ?? (colorScheme == .dark)
-    }
-
     var body: some View {
-        let palette = DiskVisualStyle.previewPalette(for: theme, dark: usesDarkVariant)
+        Image(nsImage: ThemeIconAssets.image(for: theme))
+            .resizable()
+            .interpolation(.high)
+            .antialiased(true)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(theme.displayName) application icon")
+    }
+}
 
-        GeometryReader { proxy in
-            let side = min(proxy.size.width, proxy.size.height)
-            let outerRadius = side * 0.26
-            let innerRadius = side * 0.10
-            let gap = side * 0.065
-
-            ZStack {
-                RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
-                    .fill(palette.layer)
-
-                HStack(spacing: gap) {
-                    VStack(spacing: gap) {
-                        RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
-                            .fill(palette.interactionAccent)
-                        RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
-                            .fill(palette.panel)
-                    }
-                    .frame(width: side * 0.34)
-
-                    VStack(spacing: gap) {
-                        RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
-                            .fill(palette.controlAccent)
-                        HStack(spacing: gap) {
-                            RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
-                                .fill(palette.iconAccent)
-                            RoundedRectangle(cornerRadius: innerRadius, style: .continuous)
-                                .fill(palette.available)
-                        }
-                    }
-                }
-                .padding(side * 0.19)
+private enum ThemeIconAssets {
+    static let images: [DiskThemeID: NSImage] = Dictionary(
+        uniqueKeysWithValues: DiskThemeID.allCases.compactMap { theme in
+            guard let url = Bundle.main.url(
+                forResource: theme.rawValue,
+                withExtension: "png",
+                subdirectory: "UI"
+            ), let image = NSImage(contentsOf: url) else {
+                return nil
             }
-            .overlay {
-                RoundedRectangle(cornerRadius: outerRadius, style: .continuous)
-                    .stroke(palette.border.opacity(0.72), lineWidth: max(1, side * 0.035))
-            }
+            return (theme, image)
         }
-        .frame(width: size, height: size)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(theme.displayName) theme mark")
+    )
+
+    static func image(for theme: DiskThemeID) -> NSImage {
+        images[theme] ?? NSApplication.shared.applicationIconImage
     }
 }

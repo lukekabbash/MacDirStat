@@ -1,6 +1,32 @@
 import AppKit
 import Core
 
+/// The sole polar-coordinate convention for the radial hierarchy. The chart
+/// is drawn in a flipped AppKit view, so zero begins at twelve o'clock and
+/// fractions advance clockwise as they do in the visible interface.
+enum SunburstPolarCoordinates {
+    private static let fullTurn = Double.pi * 2
+    private static let twelveOClock = -Double.pi / 2
+
+    static func point(center: CGPoint, radius: CGFloat, fraction: Double) -> CGPoint {
+        let angle = twelveOClock + normalized(fraction) * fullTurn
+        return CGPoint(
+            x: center.x + radius * CGFloat(cos(angle)),
+            y: center.y + radius * CGFloat(sin(angle))
+        )
+    }
+
+    static func fraction(at point: CGPoint, around center: CGPoint) -> Double {
+        let angle = Double(atan2(point.y - center.y, point.x - center.x)) - twelveOClock
+        return normalized(angle / fullTurn)
+    }
+
+    private static func normalized(_ value: Double) -> Double {
+        let remainder = value.truncatingRemainder(dividingBy: 1)
+        return remainder < 0 ? remainder + 1 : remainder
+    }
+}
+
 struct SunburstRasterSignature: Equatable {
     let pixelsWide: Int
     let pixelsHigh: Int
@@ -15,9 +41,11 @@ struct SunburstRenderLayout {
     let deepestDepth: Int
 
     init(bounds: CGRect, deepestDepth: Int) {
-        let outerRadius = max(28, min(bounds.width, bounds.height) * 0.47)
+        // Keep a calm edge around the outer ring; a sunburst should read as a
+        // circle inside its surface, never as a clipped wheel.
+        let outerRadius = max(28, min(bounds.width, bounds.height) * 0.44)
         let resolvedDepth = max(1, deepestDepth)
-        let targetCenter = max(34, min(70, outerRadius * 0.29))
+        let targetCenter = max(38, min(76, outerRadius * 0.33))
         let gap = max(2, min(4, outerRadius * 0.022))
         let available = max(
             CGFloat(resolvedDepth) * 8,
@@ -46,9 +74,7 @@ struct SunburstRenderLayout {
     }
 
     func angleFraction(at point: CGPoint) -> Double {
-        let angle = Double(atan2(point.y - center.y, point.x - center.x)) + Double.pi / 2
-        let normalized = angle / (Double.pi * 2)
-        return normalized < 0 ? normalized + 1 : normalized
+        SunburstPolarCoordinates.fraction(at: point, around: center)
     }
 }
 
@@ -92,10 +118,10 @@ struct SunburstArcGeometry {
     }
 
     private func point(radius: CGFloat, fraction: Double) -> CGPoint {
-        let angle = -Double.pi / 2 + fraction * Double.pi * 2
-        return CGPoint(
-            x: center.x + radius * CGFloat(cos(angle)),
-            y: center.y + radius * CGFloat(sin(angle))
+        SunburstPolarCoordinates.point(
+            center: center,
+            radius: radius,
+            fraction: fraction
         )
     }
 }

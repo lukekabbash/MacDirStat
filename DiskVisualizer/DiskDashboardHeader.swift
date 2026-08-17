@@ -40,7 +40,7 @@ struct DiskDashboardHeader: View {
     let statusLine: String
     @ObservedObject var scanTelemetry: ScanTelemetryState
     let breadcrumb: [NodeID]
-    @Binding var dashboardMode: DashboardMode
+    let dashboardMode: DashboardMode
 
     private var currentSize: UInt64 {
         metric == .allocated ? session.rootTotalAllocated : session.rootTotalLogical
@@ -57,14 +57,10 @@ struct DiskDashboardHeader: View {
                 orientation
                     .frame(minWidth: 170, maxWidth: 310, alignment: .leading)
 
+                Spacer(minLength: 12)
+
                 headerReadout
-                    .frame(maxWidth: .infinity, alignment: .center)
-
-                DashboardModeControl(selection: $dashboardMode)
-                    .frame(width: 166)
-
-                ScanStateBadge(activity: isScanning ? scanTelemetry.activity : nil, isComplete: session.isComplete)
-                    .frame(width: 74, alignment: .trailing)
+                    .frame(maxWidth: 430, alignment: .trailing)
             }
             .padding(.horizontal, 12)
             .frame(height: 43)
@@ -145,6 +141,29 @@ struct DiskDashboardHeader: View {
     }
 }
 
+/// Keeps workspace navigation and live snapshot state in the native toolbar,
+/// beside related snapshot actions rather than inside the data canvas.
+struct DashboardToolbarControls: View {
+    @Binding var selection: DashboardMode
+    let isScanning: Bool
+    let isComplete: Bool
+    let isHistorical: Bool
+    @ObservedObject var scanTelemetry: ScanTelemetryState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            DashboardModeControl(selection: $selection)
+                .frame(width: 166)
+            ScanStateBadge(
+                activity: isScanning ? scanTelemetry.activity : nil,
+                isComplete: isComplete,
+                isHistorical: isHistorical
+            )
+            .frame(width: 74, alignment: .trailing)
+        }
+    }
+}
+
 private struct DashboardModeControl: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: DashboardMode
@@ -156,11 +175,15 @@ private struct DashboardModeControl: View {
                 Button {
                     select(mode)
                 } label: {
-                    Label(mode.displayName, systemImage: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
+                    HStack(spacing: 5) {
+                        Image(systemName: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
+                        Text(mode.displayName)
+                    }
                         .font(.caption2.weight(.medium))
                         .foregroundStyle(selection == mode ? DiskVisualStyle.interactionStrong : Color.secondary)
                         .frame(maxWidth: .infinity)
                         .frame(height: 25)
+                        .contentShape(Rectangle())
                         .background {
                             if selection == mode {
                                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -226,18 +249,30 @@ private struct CompactScanActivity: View {
 private struct ScanStateBadge: View {
     let activity: ScanActivity?
     let isComplete: Bool
+    let isHistorical: Bool
 
     var body: some View {
         HStack(spacing: 6) {
             Circle()
-                .fill(activity == nil ? (isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention) : DiskVisualStyle.interactionAccent)
+                .fill(statusColor)
                 .frame(width: 6, height: 6)
-            Text(activity?.percentageText ?? (activity == nil ? (isComplete ? "Current" : "Partial") : "0%"))
+            Text(statusText)
                 .font(.caption2.weight(.semibold).monospacedDigit())
                 .contentTransition(.numericText())
         }
         .foregroundStyle(.secondary)
         .accessibilityElement(children: .combine)
+    }
+
+    private var statusText: String {
+        if isHistorical { return "Saved" }
+        return activity?.percentageText ?? (activity == nil ? (isComplete ? "Current" : "Partial") : "0%")
+    }
+
+    private var statusColor: Color {
+        if isHistorical { return DiskVisualStyle.iconAccent }
+        if activity != nil { return DiskVisualStyle.interactionAccent }
+        return isComplete ? DiskVisualStyle.available : DiskVisualStyle.attention
     }
 }
 

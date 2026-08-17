@@ -36,7 +36,7 @@ struct WorkspaceSidebar: View {
 
     private var brand: some View {
         HStack(spacing: 10) {
-            ThemedAppMark(theme: model.themeID, size: 30)
+            ThemedAppIcon(theme: model.themeID, size: 30)
                 .accessibilityHidden(true)
             Text("Mac Directory Statistics")
                 .font(.subheadline.weight(.semibold))
@@ -119,27 +119,33 @@ struct WorkspaceSidebar: View {
                 ScrollView {
                     LazyVStack(spacing: 2) {
                         ForEach(model.orderedLocations) { location in
-                            SavedLocationRow(
-                                location: location,
-                                selected: model.selectedLocationID == location.id,
-                                scanning: model.activeScanLocationID == location.id && model.isScanning,
-                                metric: model.sizeMetric,
-                                selectionNamespace: locationSelectionSurface,
-                                select: {
-                                    withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
-                                        model.selectLocation(location.id)
-                                    }
-                                },
-                                pin: { model.togglePin(location.id) },
-                                rename: { model.renameLocation(location.id) },
-                                reveal: { model.revealLocation(location.id) },
-                                remove: { model.removeLocation(location.id) }
-                            )
+                            VStack(spacing: 2) {
+                                SavedLocationRow(
+                                    location: location,
+                                    selected: model.selectedLocationID == location.id,
+                                    scanning: model.activeScanLocationID == location.id && model.isScanning,
+                                    metric: model.sizeMetric,
+                                    selectionNamespace: locationSelectionSurface,
+                                    select: {
+                                        withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+                                            model.selectLocation(location.id)
+                                        }
+                                    },
+                                    pin: { model.togglePin(location.id) },
+                                    rename: { model.renameLocation(location.id) },
+                                    reveal: { model.revealLocation(location.id) },
+                                    remove: { model.removeLocation(location.id) }
+                                )
+
+                                if model.selectedLocationID == location.id {
+                                    SidebarSnapshotHistory(location: location, metric: model.sizeMetric)
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal, 7)
                 }
-                .frame(maxHeight: model.appDestination == .scan ? 176 : .infinity)
+                .frame(maxHeight: model.appDestination == .scan ? 260 : .infinity)
                 .diskScrollChrome()
             }
         }
@@ -172,13 +178,6 @@ struct WorkspaceSidebar: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
-
-                if model.activeScanLocationID == location.id,
-                   let activity = model.scanTelemetry.activity {
-                    SidebarProgress(activity: activity)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 8)
-                }
 
                 if let session = model.session {
                     HStack {

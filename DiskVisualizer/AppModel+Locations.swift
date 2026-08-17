@@ -3,6 +3,16 @@ import Core
 import Foundation
 
 extension AppModel {
+    var isPresentingHistoricalSnapshot: Bool {
+        selectedHistoricalSnapshotID != nil
+    }
+
+    /// Historical content may drive Map and Overview, but never a filesystem
+    /// action. The UI can use this single truth to disable every action affordance.
+    var presentedSnapshotActionsAreDisabled: Bool {
+        isPresentingHistoricalSnapshot
+    }
+
     var selectedLocation: SavedLocation? {
         guard let selectedLocationID else { return nil }
         return savedLocations.first { $0.id == selectedLocationID }
@@ -49,12 +59,28 @@ extension AppModel {
     }
 
     func selectDestination(_ destination: AppDestination) {
+        if isPresentingHistoricalSnapshot
+            && (destination == .apps || destination == .review) {
+            selectCurrentSnapshot()
+        }
         appDestination = destination
         if destination == .apps { prepareAppInventory() }
     }
 
     func selectLocation(_ id: UUID) {
         guard let index = savedLocations.firstIndex(where: { $0.id == id }) else { return }
+        if selectedLocationID == id {
+            appDestination = .scan
+            if selectedHistoricalSnapshotID != nil {
+                selectCurrentSnapshot()
+            }
+            return
+        }
+        snapshotHistoryOperationID = UUID()
+        selectedHistoricalSnapshotID = nil
+        savedSnapshotDescriptors = []
+        snapshotHistoryError = nil
+        isSnapshotHistoryBusy = false
         selectedLocationID = id
         savedLocations[index].lastSelectedAt = Date()
         savedLocations[index].scanRoot.accessMode = .readOnly
@@ -63,6 +89,7 @@ extension AppModel {
         appDestination = .scan
         presentLocationSnapshot(locationSnapshots[id])
         persistLocations()
+        Task { await reloadSnapshotHistory(for: id) }
     }
 
     func addSavedLocation(_ proposedRoot: ScanRoot, canonicalPath proposedCanonicalPath: String? = nil) {
@@ -77,6 +104,10 @@ extension AppModel {
             savedLocations[existingIndex].scanRoot = refreshedRoot
             savedLocations[existingIndex].canonicalPath = proposedPath
             savedLocations[existingIndex].availability = .ready
+            if selectedLocationID == savedLocations[existingIndex].id {
+                activeRoot = refreshedRoot
+                cleanupControlsEnabled = false
+            }
             selectLocation(savedLocations[existingIndex].id)
             persistLocations()
             return
@@ -139,7 +170,12 @@ extension AppModel {
             if let replacement = orderedLocations.first {
                 selectLocation(replacement.id)
             } else {
+                snapshotHistoryOperationID = UUID()
                 selectedLocationID = nil
+                selectedHistoricalSnapshotID = nil
+                savedSnapshotDescriptors = []
+                snapshotHistoryError = nil
+                isSnapshotHistoryBusy = false
                 activeRoot = nil
                 cleanupControlsEnabled = false
                 presentLocationSnapshot(nil)
@@ -187,6 +223,171 @@ extension AppModel {
 
     func snapshot(for locationID: UUID) -> LocationSnapshot? {
         locationSnapshots[locationID]
+    }
+
+    /// Refreshes lightweight catalog rows only; full scan arenas remain on disk
+    /// until the user selects one.
+    func reloadSnapshotHistory(
+        for locationID: UUID? = nil,
+        preservingError: String? = nil
+    ) async {
+        let requestedLocationID = locationID ?? selectedLocationID
+        guard let requestedLocationID else {
+            savedSnapshotDescriptors = []
+            return
+        }
+        let operationID = beginSnapshotHistoryOperation()
+        defer { finishSnapshotHistoryOperation(operationID) }
+        let descriptors = await snapshotStore.descriptors(for: requestedLocationID)
+        guard snapshotHistoryOperationID == operationID,
+              selectedLocationID == requestedLocationID
+        else { return }
+        savedSnapshotDescriptors = descriptors
+        snapshotHistoryError = preservingError
+    }
+
+    /// Explicit save seam for UI buttons. Partial checkpoints and completed
+    /// scans are never written automatically.
+    func saveCurrentSnapshotToHistory() async {
+        guard let locationID = selectedLocationID,
+              selectedHistoricalSnapshotID == nil,
+              !isScanning,
+              let snapshot = locationSnapshots[locationID],
+              snapshot.session.isComplete
+        else {
+            snapshotHistoryError = "Finish the current scan before saving a snapshot."
+            return
+        }
+
+        let operationID = beginSnapshotHistoryOperation()
+        defer { finishSnapshotHistoryOperation(operationID) }
+        snapshotHistoryError = nil
+        statusLine = "Compressing a read-only snapshot…"
+        let stored = StoredScanSnapshot(
+            id: snapshot.generation,
+            locationID: locationID,
+            scannedAt: snapshot.scannedAt,
+            session: snapshot.session,
+            volumeSpace: snapshot.volumeSpace.map(ScanSnapshotVolumeSpace.init)
+        )
+
+        do {
+            let descriptor = try await snapshotStore.save(stored)
+            let descriptors = await snapshotStore.descriptors(for: locationID)
+            guard selectedLocationID == locationID else { return }
+            savedSnapshotDescriptors = descriptors
+            guard snapshotHistoryOperationID == operationID else { return }
+            let storedSize = ByteCountFormatter.string(
+                fromByteCount: Int64(clamping: descriptor.storedByteCount),
+                countStyle: .file
+            )
+            statusLine = "Saved read-only snapshot · \(storedSize)"
+        } catch {
+            guard snapshotHistoryOperationID == operationID,
+                  selectedLocationID == locationID
+            else { return }
+            snapshotHistoryError = error.localizedDescription
+            statusLine = "Snapshot was not saved · \(error.localizedDescription)"
+        }
+    }
+
+    /// Loads one immutable arena without resolving the location bookmark or
+    /// touching the source. Mutation remains locked until current scan state is
+    /// explicitly restored.
+    func selectHistoricalSnapshot(_ snapshotID: UUID) async {
+        guard !isScanning else {
+            snapshotHistoryError = "Stop the active scan before opening saved history."
+            return
+        }
+        guard let locationID = selectedLocationID,
+              let descriptor = savedSnapshotDescriptors.first(where: {
+                  $0.id == snapshotID && $0.locationID == locationID
+              })
+        else {
+            snapshotHistoryError = "That saved snapshot is no longer listed."
+            return
+        }
+
+        let operationID = beginSnapshotHistoryOperation()
+        defer { finishSnapshotHistoryOperation(operationID) }
+        snapshotHistoryError = nil
+        do {
+            guard let stored = try await snapshotStore.load(
+                snapshotID: snapshotID,
+                locationID: locationID
+            ) else {
+                throw SnapshotStoreError.snapshotNotFound
+            }
+            guard snapshotHistoryOperationID == operationID,
+                  selectedLocationID == locationID
+            else { return }
+            guard !isScanning else {
+                snapshotHistoryError = "Stop the active scan before opening saved history."
+                return
+            }
+            guard stored.session.isComplete,
+                  stored.fidelity == .interactiveScanSession,
+                  stored.session.rootURLBookmarkID == nil
+                    || stored.session.rootURLBookmarkID == locationID
+            else {
+                throw SnapshotStoreError.corruptArchive
+            }
+
+            cleanupControlsEnabled = false
+            if let index = savedLocations.firstIndex(where: { $0.id == locationID }) {
+                savedLocations[index].scanRoot.accessMode = .readOnly
+                activeRoot = savedLocations[index].scanRoot
+            }
+            selectedHistoricalSnapshotID = snapshotID
+            let historical = LocationSnapshot(
+                locationID: locationID,
+                session: stored.session,
+                scannedAt: stored.scannedAt,
+                volumeSpace: stored.volumeSpace.map(VolumeSpaceSnapshot.init),
+                generation: stored.id
+            )
+            presentLocationSnapshot(historical)
+            statusLine = "Saved \(descriptor.scannedAt.formatted(date: .abbreviated, time: .shortened)) · read-only history"
+            persistLocations()
+            refreshSelectedReviewStates()
+        } catch {
+            guard snapshotHistoryOperationID == operationID,
+                  selectedLocationID == locationID
+            else { return }
+            let failureMessage = error.localizedDescription
+            snapshotHistoryError = failureMessage
+            statusLine = "Saved snapshot unavailable · \(failureMessage)"
+            await reloadSnapshotHistory(for: locationID, preservingError: failureMessage)
+        }
+    }
+
+    /// Returns to the latest in-memory scan. This never scans implicitly.
+    func selectCurrentSnapshot() {
+        guard let locationID = selectedLocationID else { return }
+        snapshotHistoryOperationID = UUID()
+        isSnapshotHistoryBusy = false
+        selectedHistoricalSnapshotID = nil
+        snapshotHistoryError = nil
+        cleanupControlsEnabled = false
+        if let index = savedLocations.firstIndex(where: { $0.id == locationID }) {
+            savedLocations[index].scanRoot.accessMode = .readOnly
+            activeRoot = savedLocations[index].scanRoot
+        }
+        presentLocationSnapshot(locationSnapshots[locationID])
+        persistLocations()
+        refreshSelectedReviewStates()
+    }
+
+    private func beginSnapshotHistoryOperation() -> UUID {
+        let operationID = UUID()
+        snapshotHistoryOperationID = operationID
+        isSnapshotHistoryBusy = true
+        return operationID
+    }
+
+    private func finishSnapshotHistoryOperation(_ operationID: UUID) {
+        guard snapshotHistoryOperationID == operationID else { return }
+        isSnapshotHistoryBusy = false
     }
 
     func recordCompletedScan(
@@ -343,5 +544,17 @@ extension AppModel {
             return root.volumeIdentifier == nil ? .needsAccess : .disconnected
         }
         return .ready
+    }
+}
+
+private extension ScanSnapshotVolumeSpace {
+    init(_ source: VolumeSpaceSnapshot) {
+        self.init(name: source.name, capacity: source.capacity, available: source.available)
+    }
+}
+
+private extension VolumeSpaceSnapshot {
+    init(_ source: ScanSnapshotVolumeSpace) {
+        self.init(name: source.name, capacity: source.capacity, available: source.available)
     }
 }

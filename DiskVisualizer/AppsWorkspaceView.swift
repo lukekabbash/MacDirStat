@@ -13,25 +13,25 @@ struct AppsWorkspaceView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            ContextualInspectorSplit(isPresented: selected != nil) {
+            ContextualInspectorSplit(selection: selected?.id) {
                 inventory
-            } inspector: {
+            } inspector: { identifier in
+                let item = app(for: identifier)
                 AppInspector(
-                    item: selected,
+                    item: item,
                     metric: model.sizeMetric,
-                    deletionAllowed: selected.map { model.isDeletionAllowed(for: $0.reference.sourceLocationID) } ?? false,
-                    close: { model.selectedAppInventoryID = nil },
-                    quickLook: model.quickLookSelected,
-                    reveal: revealSelected,
-                    open: openSelected,
-                    addReview: addSelectedToReview,
-                    move: moveSelected,
-                    trash: trashSelected
+                    deletionAllowed: item.map { model.isDeletionAllowed(for: $0.reference.sourceLocationID) } ?? false,
+                    close: { closeInspector(for: identifier) },
+                    quickLook: { quickLookApp(identifier) },
+                    reveal: { revealApp(identifier) },
+                    open: { openApp(identifier) },
+                    addReview: { addAppToReview(identifier) },
+                    move: { moveApp(identifier) },
+                    trash: { trashApp(identifier) }
                 )
             }
         }
         .background(DiskVisualStyle.canvas)
-        .onAppear { model.prepareAppInventory() }
     }
 
     private var header: some View {
@@ -42,6 +42,12 @@ struct AppsWorkspaceView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            if model.isPreparingAppInventory {
+                ProgressView()
+                    .controlSize(.small)
+                    .help("Refreshing application metadata")
+                    .transition(.opacity)
+            }
             Picker("Scope", selection: $model.appInventoryScope) {
                 ForEach(AppInventoryScope.allCases) { Text($0.displayName).tag($0) }
             }
@@ -92,11 +98,47 @@ struct AppsWorkspaceView: View {
         }
     }
 
-    private func revealSelected() { selected.map { CleanupService().revealInFinder(path: $0.reference.path) } }
-    private func openSelected() { selected.map { CleanupService().openFile(path: $0.reference.path) } }
-    private func addSelectedToReview() { if let selected { model.addAppToReview(selected.id) } }
-    private func moveSelected() { if let selected { requestMove(selected.reference.sourceLocationID, selected.reference.path, selected.displayName, true) } }
-    private func trashSelected() { if let selected { requestTrash(selected.reference.sourceLocationID, selected.reference.path, selected.displayName, true) } }
+    private func app(for identifier: String) -> AppInventoryItem? {
+        model.appInventory.first { $0.id == identifier }
+    }
+
+    private func selectedApp(for identifier: String) -> AppInventoryItem? {
+        guard model.selectedAppInventoryID == identifier else { return nil }
+        return app(for: identifier)
+    }
+
+    private func closeInspector(for identifier: String) {
+        guard model.selectedAppInventoryID == identifier else { return }
+        model.selectedAppInventoryID = nil
+    }
+
+    private func quickLookApp(_ identifier: String) {
+        guard model.selectedAppInventoryID == identifier else { return }
+        model.quickLookSelected()
+    }
+
+    private func revealApp(_ identifier: String) {
+        selectedApp(for: identifier).map { CleanupService().revealInFinder(path: $0.reference.path) }
+    }
+
+    private func openApp(_ identifier: String) {
+        selectedApp(for: identifier).map { CleanupService().openFile(path: $0.reference.path) }
+    }
+
+    private func addAppToReview(_ identifier: String) {
+        guard selectedApp(for: identifier) != nil else { return }
+        model.addAppToReview(identifier)
+    }
+
+    private func moveApp(_ identifier: String) {
+        guard let item = selectedApp(for: identifier) else { return }
+        requestMove(item.reference.sourceLocationID, item.reference.path, item.displayName, true)
+    }
+
+    private func trashApp(_ identifier: String) {
+        guard let item = selectedApp(for: identifier) else { return }
+        requestTrash(item.reference.sourceLocationID, item.reference.path, item.displayName, true)
+    }
 }
 
 private struct AppTableHeader: View {

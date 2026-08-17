@@ -35,6 +35,7 @@ private enum WorkspaceSplitLayout {
     static let treemapHorizontalInset: CGFloat = 20
     static let transitionDuration: TimeInterval = 0.20
     static let previewFadeDuration: TimeInterval = 0.08
+    static let inspectorReplacementDuration: TimeInterval = 0.14
 }
 
 /// Coordinates a real trailing split without asking the native treemap to
@@ -101,9 +102,10 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
                         .zIndex(1)
                 }
 
+                // Motion authority: this shell changes position only at the
+                // visible/non-visible boundary. Selection replacement stays local.
                 if let target = presentedInspector {
-                    inspectorContent(target)
-                        .id(target)
+                    InspectorContentHandoff(selection: target, content: inspectorContent)
                         .frame(width: WorkspaceSplitLayout.inspectorWidth)
                         .frame(maxHeight: .infinity)
                         .overlay(alignment: .leading) {
@@ -113,7 +115,7 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
                         }
                         .offset(x: inspectorTransitionOffset)
                         .opacity(inspectorTransitionOpacity)
-                        .transition(inspectorTransition)
+                        .transition(inspectorVisibilityTransition)
                         .allowsHitTesting(!isMapSplitTransitionInFlight)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
                         .zIndex(2)
@@ -151,7 +153,7 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
         .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: model.dashboardMode)
     }
 
-    private var inspectorTransition: AnyTransition {
+    private var inspectorVisibilityTransition: AnyTransition {
         reduceMotion
             ? .opacity
             : .move(edge: .trailing).combined(with: .opacity)
@@ -248,6 +250,13 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
     private func synchronizeInspectorPresentation(with target: WorkspaceInspectorTarget?) {
         guard target != presentedInspector else { return }
 
+        let isVisible = presentedInspector != nil
+        let shouldBeVisible = target != nil
+        if isVisible, shouldBeVisible, let target {
+            replaceOpenInspectorContent(with: target)
+            return
+        }
+
         let cancelledMapTransition = mapSplitPreview != nil
         if cancelledMapTransition { cancelMapSplitTransition() }
         if cancelledMapTransition || reduceMotion {
@@ -271,6 +280,13 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
         withAnimation(DiskVisualStyle.contentMotion) {
             presentedInspector = target
         }
+    }
+
+    private func replaceOpenInspectorContent(with target: WorkspaceInspectorTarget) {
+        if mapSplitPreview?.direction == .closing {
+            cancelMapSplitTransition(preservingVisibility: true)
+        }
+        applyWithoutAnimation { presentedInspector = target }
     }
 
     private func beginMapInspectorOpening(to target: WorkspaceInspectorTarget) {
@@ -388,7 +404,7 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
         return preview.identity == mapVisualIdentity
     }
 
-    private func cancelMapSplitTransition() {
+    private func cancelMapSplitTransition(preservingVisibility: Bool = false) {
         let wasClosing = mapSplitPreview?.direction == .closing
         applyWithoutAnimation {
             splitTransitionGeneration = UUID()
@@ -396,7 +412,7 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
             mapSplitPreviewOpacity = 0
             mapSplitProgress = 1
             inspectorMotionProgress = 1
-            if wasClosing { presentedInspector = nil }
+            if wasClosing, !preservingVisibility { presentedInspector = nil }
         }
     }
 
@@ -414,22 +430,125 @@ struct WorkspaceSplitView<MapCanvas: View, OverviewCanvas: View, InspectorConten
     }
 }
 
+private enum InspectorContentSlot<Selection: Hashable>: Hashable {
+    case outgoing(Selection)
+    case current(Selection)
+}
+
+/// Keeps a visible inspector's split geometry stable while its contents change.
+private struct InspectorContentHandoff<Selection: Hashable, Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let selection: Selection?
+    private let content: (Selection) -> Content
+
+    @State private var displayedSelection: Selection?
+    @State private var outgoingSelection: Selection?
+    @State private var replacementProgress: CGFloat = 1
+    @State private var replacementGeneration = UUID()
+
+    init(
+        selection: Selection?,
+        @ViewBuilder content: @escaping (Selection) -> Content
+    ) {
+        self.selection = selection
+        self.content = content
+        _displayedSelection = State(initialValue: selection)
+    }
+
+    var body: some View {
+        ZStack {
+            if let outgoingSelection {
+                content(outgoingSelection)
+                    .id(InspectorContentSlot.outgoing(outgoingSelection))
+                    .opacity(1 - replacementProgress)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
+            if let displayedSelection {
+                content(displayedSelection)
+                    .id(InspectorContentSlot.current(displayedSelection))
+                    .opacity(replacementProgress)
+                    .offset(y: reduceMotion ? 0 : (1 - replacementProgress) * 3)
+                    .allowsHitTesting(outgoingSelection == nil)
+            }
+        }
+        .onAppear { synchronizeContent(with: selection) }
+        .onChange(of: selection) { _, selection in
+            synchronizeContent(with: selection)
+        }
+    }
+
+    private func synchronizeContent(with selection: Selection?) {
+        guard selection != displayedSelection else { return }
+        guard let selection, let displayedSelection, !reduceMotion else {
+            applyImmediately(selection)
+            return
+        }
+
+        let generation = UUID()
+        applyWithoutAnimation {
+            replacementGeneration = generation
+            outgoingSelection = displayedSelection
+            self.displayedSelection = selection
+            replacementProgress = 0
+        }
+        animateReplacement(generation: generation)
+    }
+
+    private func animateReplacement(generation: UUID) {
+        DispatchQueue.main.async {
+            guard replacementGeneration == generation else { return }
+            withAnimation(DiskVisualStyle.motion) {
+                replacementProgress = 1
+            }
+            releaseOutgoingContent(after: generation)
+        }
+    }
+
+    private func releaseOutgoingContent(after generation: UUID) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + WorkspaceSplitLayout.inspectorReplacementDuration) {
+            guard replacementGeneration == generation else { return }
+            applyWithoutAnimation {
+                outgoingSelection = nil
+                replacementProgress = 1
+            }
+        }
+    }
+
+    private func applyImmediately(_ selection: Selection?) {
+        applyWithoutAnimation {
+            replacementGeneration = UUID()
+            displayedSelection = selection
+            outgoingSelection = nil
+            replacementProgress = 1
+        }
+    }
+
+    private func applyWithoutAnimation(_ changes: () -> Void) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction, changes)
+    }
+}
+
 /// A lightweight split for list workspaces whose primary content is cheap to
 /// resize. The inspector occupies no layout space until a valid selection
 /// exists, then enters as a real trailing column rather than an overlay.
-struct ContextualInspectorSplit<Primary: View, Inspector: View>: View {
+struct ContextualInspectorSplit<Selection: Hashable, Primary: View, Inspector: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    let isPresented: Bool
+    let selection: Selection?
     private let primary: () -> Primary
-    private let inspector: () -> Inspector
+    private let inspector: (Selection) -> Inspector
 
     init(
-        isPresented: Bool,
+        selection: Selection?,
         @ViewBuilder primary: @escaping () -> Primary,
-        @ViewBuilder inspector: @escaping () -> Inspector
+        @ViewBuilder inspector: @escaping (Selection) -> Inspector
     ) {
-        self.isPresented = isPresented
+        self.selection = selection
         self.primary = primary
         self.inspector = inspector
     }
@@ -440,19 +559,20 @@ struct ContextualInspectorSplit<Primary: View, Inspector: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .layoutPriority(1)
 
-            if isPresented {
+            // The visible boundary owns split motion; handoff owns replacement.
+            if let selection {
                 Rectangle()
                     .fill(DiskVisualStyle.strongHairline)
                     .frame(width: 1)
                     .transition(.opacity)
 
-                inspector()
+                InspectorContentHandoff(selection: selection, content: inspector)
                     .frame(width: WorkspaceSplitLayout.inspectorWidth)
                     .frame(maxHeight: .infinity)
                     .transition(reduceMotion ? .identity : .move(edge: .trailing).combined(with: .opacity))
             }
         }
         .clipped()
-        .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: isPresented)
+        .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: selection != nil)
     }
 }

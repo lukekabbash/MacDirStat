@@ -2,6 +2,44 @@ import Core
 import SwiftUI
 import Treemap
 
+private enum SunburstScopeTransitionDirection {
+    case descend
+    case ascend
+    case replace
+
+    var outgoingEndScale: CGFloat {
+        switch self {
+        case .descend: 1.045
+        case .ascend: 0.955
+        case .replace: 1
+        }
+    }
+
+    var incomingStartScale: CGFloat {
+        switch self {
+        case .descend: 0.955
+        case .ascend: 1.045
+        case .replace: 1
+        }
+    }
+}
+
+/// A two-surface handoff keeps drill navigation legible without asking the
+/// chart renderer to animate hundreds of individual arcs.
+private struct SunburstScopeTransition: Identifiable {
+    let id: UUID
+    let outgoingProjection: StorageHierarchyProjection
+    let outgoingProjectionID: UUID
+    let incomingProjection: StorageHierarchyProjection
+    let incomingProjectionID: UUID
+    let direction: SunburstScopeTransitionDirection
+}
+
+private struct SunburstScopeRequest {
+    let targetID: NodeID
+    let direction: SunburstScopeTransitionDirection
+}
+
 /// The navigable hierarchy view behind the Sunburst presentation. It keeps a
 /// deliberately shallow, readable set of rings on screen and changes scope
 /// instead of forcing the user to parse an entire disk in one radial diagram.
@@ -14,19 +52,40 @@ struct StorageHierarchyView: View {
     let selectedNodeID: NodeID?
     @Binding var scopeNodeID: NodeID
     let onSelectNode: (NodeID?) -> Void
+    let contextMenuProvider: StorageNodeContextMenuProvider
 
     @State private var projection: StorageHierarchyProjection?
     @State private var preparedProjectionToken: String?
     @State private var projectionID = UUID()
     @State private var isPreparing = true
     @State private var showsAllChildren = false
+    @State private var requestedScopeNodeID: NodeID?
+    @State private var scopeRequest: SunburstScopeRequest?
+    @State private var chartTransition: SunburstScopeTransition?
+    @State private var chartTransitionProgress: CGFloat = 1
+    @State private var transitionGeneration = UUID()
 
     private var sessionToken: String {
         String(sessionRevision)
     }
 
+    private func projectionToken(for nodeID: NodeID) -> String {
+        "\(sessionToken)|\(nodeID.rawValue)|\(metric.rawValue)"
+    }
+
+    private var requestedScope: NodeID {
+        guard let requestedScopeNodeID,
+              session.node(id: requestedScopeNodeID) != nil
+        else { return validScopeNodeID }
+        return requestedScopeNodeID
+    }
+
+    private var activeProjectionToken: String {
+        projectionToken(for: validScopeNodeID)
+    }
+
     private var projectionInputToken: String {
-        "\(sessionToken)|\(scopeNodeID.rawValue)|\(metric.rawValue)"
+        projectionToken(for: requestedScope)
     }
 
     private var breadcrumb: [NodeID] {
@@ -42,7 +101,7 @@ struct StorageHierarchyView: View {
     }
 
     private var currentProjection: StorageHierarchyProjection? {
-        guard preparedProjectionToken == projectionInputToken else { return nil }
+        guard preparedProjectionToken == activeProjectionToken else { return nil }
         return projection
     }
 
@@ -75,16 +134,18 @@ struct StorageHierarchyView: View {
             childNavigator
         }
         .task(id: projectionInputToken) {
-            await prepareProjection(for: validScopeNodeID)
+            await prepareProjection(for: requestedScope)
         }
         .onChange(of: sessionToken) {
+            cancelChartTransition()
+            requestedScopeNodeID = nil
+            scopeRequest = nil
             guard scopeNodeID != .root else { return }
             scopeNodeID = .root
         }
         .onChange(of: projectionInputToken) {
             showsAllChildren = false
         }
-        .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: scopeNodeID)
     }
 
     private var header: some View {
@@ -148,28 +209,12 @@ struct StorageHierarchyView: View {
     @ViewBuilder
     private var chart: some View {
         if let projection = currentProjection, projection.rootSize > 0 {
-            StorageSunburstChart(
-                session: session,
-                sessionToken: sessionToken,
-                projection: projection,
-                projectionID: projectionID,
-                selectedNodeID: selectedNodeID,
-                onSelectionChange: onSelectNode,
-                onDrillInto: openLayer,
-                onNavigateBack: navigateBack
-            )
-            .frame(minHeight: 310, idealHeight: 370, maxHeight: 440)
-            .background(DiskVisualStyle.raisedSurface.opacity(0.46), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(DiskVisualStyle.hairline, lineWidth: 1)
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Sunburst hierarchy for \(scopeNode?.name ?? session.rootDisplayName)")
-            .accessibilityValue(chartAccessibilityValue(projection))
-            .accessibilityHint("Select an item below to inspect it. Double-click a folder in the chart, or press Return, to open its next layer.")
-            .accessibilityAction(named: "Open selected folder") {
-                if let selectedNodeID { openLayer(selectedNodeID) }
+            chartSurface(for: projection) {
+                if let chartTransition {
+                    transitionCharts(chartTransition)
+                } else {
+                    sunburstChart(projection: projection, projectionID: projectionID)
+                }
             }
         } else if isProjectionPreparing {
             ProgressView("Preparing hierarchy…")
@@ -182,6 +227,95 @@ struct StorageHierarchyView: View {
             )
             .frame(maxWidth: .infinity, minHeight: 310)
         }
+    }
+
+    private func chartSurface<Content: View>(
+        for projection: StorageHierarchyProjection,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(DiskVisualStyle.raisedSurface.opacity(0.46))
+            // A fixed chart viewport gives the hosted AppKit view a truthful
+            // point-space height even inside this workspace's vertical scroll.
+            // `idealHeight` collapses toward its minimum there and makes the
+            // radial hierarchy read at roughly half its intended scale.
+            .frame(maxWidth: .infinity)
+            .frame(height: 420)
+            .overlay {
+                GeometryReader { proxy in
+                    content()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(DiskVisualStyle.hairline, lineWidth: 1)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Sunburst hierarchy for \(scopeNode?.name ?? session.rootDisplayName)")
+            .accessibilityValue(chartAccessibilityValue(projection))
+            .accessibilityHint("Select an item below to inspect it. Double-click a folder in the chart, or press Return, to open its next layer.")
+            .accessibilityAction(named: "Open selected folder") {
+                if let selectedNodeID { openLayer(selectedNodeID) }
+            }
+    }
+
+    private func sunburstChart(
+        projection: StorageHierarchyProjection,
+        projectionID: UUID
+    ) -> some View {
+        StorageSunburstChart(
+            session: session,
+            sessionToken: sessionToken,
+            projection: projection,
+            projectionID: projectionID,
+            selectedNodeID: selectedNodeID,
+            onSelectionChange: onSelectNode,
+            onDrillInto: openLayer,
+            onNavigateBack: navigateBack,
+            contextMenuProvider: { nodeID in
+                let navigationAction: StorageNodeNavigationAction?
+                if session.node(id: nodeID)?.childCount ?? 0 > 0 {
+                    navigationAction = StorageNodeNavigationAction(
+                        title: "Open Folder Layer",
+                        systemImage: "arrow.down.right.circle",
+                        perform: { openLayer(nodeID) }
+                    )
+                } else {
+                    navigationAction = nil
+                }
+                return contextMenuProvider(nodeID, navigationAction)
+            }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private func transitionCharts(_ transition: SunburstScopeTransition) -> some View {
+        ZStack {
+            sunburstChart(
+                projection: transition.outgoingProjection,
+                projectionID: transition.outgoingProjectionID
+            )
+            .opacity(1 - Double(chartTransitionProgress))
+            .scaleEffect(
+                1 + (transition.direction.outgoingEndScale - 1) * chartTransitionProgress
+            )
+            .allowsHitTesting(chartTransitionProgress < 0.5)
+
+            sunburstChart(
+                projection: transition.incomingProjection,
+                projectionID: transition.incomingProjectionID
+            )
+            .opacity(Double(chartTransitionProgress))
+            .scaleEffect(
+                transition.direction.incomingStartScale +
+                    (1 - transition.direction.incomingStartScale) * chartTransitionProgress
+            )
+            .allowsHitTesting(chartTransitionProgress >= 0.5)
+        }
+        .clipped()
     }
 
     @ViewBuilder
@@ -287,20 +421,102 @@ struct StorageHierarchyView: View {
         )
 
         guard !Task.isCancelled, inputToken == projectionInputToken else { return }
-        withAnimation(reduceMotion ? nil : DiskVisualStyle.contentMotion) {
-            projection = result
-            preparedProjectionToken = inputToken
-            projectionID = UUID()
-            isPreparing = false
+        let previousProjection = currentProjection
+        let previousProjectionID = projectionID
+        let completedScopeRequest = scopeRequest?.targetID == result.rootID &&
+            requestedScopeNodeID == result.rootID
+        let requestDirection = scopeRequest?.direction ?? .replace
+        let nextProjectionID = UUID()
+
+        projection = result
+        preparedProjectionToken = inputToken
+        projectionID = nextProjectionID
+        isPreparing = false
+
+        guard completedScopeRequest else { return }
+
+        requestedScopeNodeID = nil
+        scopeRequest = nil
+        scopeNodeID = result.rootID
+
+        guard let previousProjection,
+              previousProjection.rootID != result.rootID
+        else { return }
+        beginChartTransition(
+            from: previousProjection,
+            projectionID: previousProjectionID,
+            to: result,
+            incomingProjectionID: nextProjectionID,
+            direction: requestDirection
+        )
+    }
+
+    private func beginChartTransition(
+        from outgoingProjection: StorageHierarchyProjection,
+        projectionID outgoingProjectionID: UUID,
+        to incomingProjection: StorageHierarchyProjection,
+        incomingProjectionID: UUID,
+        direction: SunburstScopeTransitionDirection
+    ) {
+        guard !reduceMotion else {
+            cancelChartTransition()
+            return
         }
+
+        let generation = UUID()
+        transitionGeneration = generation
+        chartTransition = SunburstScopeTransition(
+            id: generation,
+            outgoingProjection: outgoingProjection,
+            outgoingProjectionID: outgoingProjectionID,
+            incomingProjection: incomingProjection,
+            incomingProjectionID: incomingProjectionID,
+            direction: direction
+        )
+        chartTransitionProgress = 0
+
+        DispatchQueue.main.async {
+            guard transitionGeneration == generation else { return }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                chartTransitionProgress = 1
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            guard transitionGeneration == generation else { return }
+            chartTransition = nil
+            chartTransitionProgress = 1
+        }
+    }
+
+    private func cancelChartTransition() {
+        transitionGeneration = UUID()
+        chartTransition = nil
+        chartTransitionProgress = 1
     }
 
     private func setScope(_ nodeID: NodeID) {
         guard session.node(id: nodeID) != nil else { return }
-        withAnimation(reduceMotion ? nil : DiskVisualStyle.contentMotion) {
-            scopeNodeID = nodeID
+        guard nodeID != validScopeNodeID else {
+            onSelectNode(nodeID)
+            return
         }
+
+        cancelChartTransition()
+        scopeRequest = SunburstScopeRequest(
+            targetID: nodeID,
+            direction: transitionDirection(from: validScopeNodeID, to: nodeID)
+        )
+        requestedScopeNodeID = nodeID
         onSelectNode(nodeID)
+    }
+
+    private func transitionDirection(
+        from sourceID: NodeID,
+        to targetID: NodeID
+    ) -> SunburstScopeTransitionDirection {
+        if session.node(id: targetID)?.parentID == sourceID { return .descend }
+        if session.node(id: sourceID)?.parentID == targetID { return .ascend }
+        return .replace
     }
 
     private func openLayer(_ nodeID: NodeID) {
