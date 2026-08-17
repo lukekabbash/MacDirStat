@@ -474,18 +474,19 @@ final class AppModel: ObservableObject {
                     // mutation is offered to the user.
                     writeAccess: true,
                     progress: { [weak self] progress in
-                        Task { @MainActor in
-                            guard let self, self.activeScanID == scanID else { return }
+                        guard let model = self else { return }
+                        Task { @MainActor [model] in
+                            guard model.activeScanID == scanID else { return }
                             let now = Date.timeIntervalSinceReferenceDate
-                            let previousTime = self.lastProgressSampleTime ?? now
+                            let previousTime = model.lastProgressSampleTime ?? now
                             let elapsed = max(0.001, now - previousTime)
-                            let delta = max(0, progress.scannedNodes - self.lastProgressSampleCount)
+                            let delta = max(0, progress.scannedNodes - model.lastProgressSampleCount)
                             let instantRate = Double(delta) / elapsed
-                            let previousRate = self.scanTelemetry.activity?.itemsPerSecond ?? 0
+                            let previousRate = model.scanTelemetry.activity?.itemsPerSecond ?? 0
                             let smoothedRate = previousRate == 0
                                 ? instantRate
                                 : previousRate * 0.72 + instantRate * 0.28
-                            self.scanTelemetry.activity = ScanActivity(
+                            model.scanTelemetry.activity = ScanActivity(
                                 startedAt: scanStartedAt,
                                 phase: progress.phase,
                                 inspectedItems: progress.scannedNodes,
@@ -494,8 +495,8 @@ final class AppModel: ObservableObject {
                                 itemsPerSecond: smoothedRate,
                                 totalItems: progress.totalNodes
                             )
-                            self.lastProgressSampleTime = now
-                            self.lastProgressSampleCount = progress.scannedNodes
+                            model.lastProgressSampleTime = now
+                            model.lastProgressSampleCount = progress.scannedNodes
                             if let partialSession = progress.partialSession {
                                 let partialSnapshot = LocationSnapshot(
                                     locationID: locationID,
@@ -504,10 +505,10 @@ final class AppModel: ObservableObject {
                                     volumeSpace: scanVolumeSpace,
                                     generation: scanGeneration
                                 )
-                                self.locationSnapshots[locationID] = partialSnapshot
-                                self.snapshotCatalogRevision &+= 1
-                                if self.selectedLocationID == locationID {
-                                    self.publishSession(partialSession)
+                                model.locationSnapshots[locationID] = partialSnapshot
+                                model.snapshotCatalogRevision &+= 1
+                                if model.selectedLocationID == locationID {
+                                    model.publishSession(partialSession)
                                 }
                             }
                         }
