@@ -13,6 +13,10 @@ Mac Directory Statistics (`macdirstat`) is a native macOS storage explorer with 
 
 **License:** MIT. **Platform:** macOS 14+ (universal binary when archived in Xcode).
 
+## Install
+
+Download the latest universal DMG from [GitHub Releases](https://github.com/lukekabbash/MacDirStat/releases/latest), open it, and drag **Mac Directory Statistics** to **Applications**. The v0.1.0 preview is ad-hoc signed, so its first launch requires Control-clicking the installed app and choosing **Open**; no terminal command is required. Apple Developer ID signing and notarization are already supported by the release pipeline once the repository secrets are configured.
+
 ## Build (contributors)
 
 1. Open `DiskVisualizer.xcodeproj` in Xcode 15+ on a Mac.
@@ -48,3 +52,5 @@ The app does not run background scans, build aggregate cross-volume maps, execut
 ## CI
 
 GitHub Actions (`.github/workflows/macos.yml`) runs `swift test` and `xcodebuild` on `macos-14`.
+
+Tagged releases use `.github/workflows/release-macos.yml` to build and verify one universal Apple silicon + Intel app, then publish a DMG, ZIP, and SHA-256 manifest. Maintainer steps and optional notarization secrets are documented in [docs/RELEASING.md](docs/RELEASING.md).
