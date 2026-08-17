@@ -6,7 +6,7 @@ import SwiftUI
 /// tracking, paging, keyboard navigation, accessibility, and overlay fading.
 final class DiskSlimScroller: NSScroller {
     private enum Metrics {
-        static let knobWidth: CGFloat = 5.5
+        static let knobWidth: CGFloat = 3
         static let legacyTrackWidth: CGFloat = 1
     }
 
@@ -46,7 +46,7 @@ final class DiskSlimScroller: NSScroller {
         guard let existingScroller = scrollView.verticalScroller else { return nil }
 
         let scroller = DiskSlimScroller(frame: existingScroller.frame)
-        scroller.controlSize = existingScroller.controlSize
+        scroller.controlSize = .mini
         scroller.scrollerStyle = existingScroller.scrollerStyle
         scroller.knobStyle = existingScroller.knobStyle
         scroller.isEnabled = existingScroller.isEnabled

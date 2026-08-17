@@ -18,16 +18,16 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $sidebarVisibility) {
             sidebar
-                .navigationSplitViewColumnWidth(min: 248, ideal: 292, max: 320)
+                .navigationSplitViewColumnWidth(min: 268, ideal: 300, max: 340)
         } detail: {
             destinationCanvas
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 1_140, minHeight: 680)
+        .frame(minWidth: 1_140, minHeight: 620)
+        .toolbarBackground(DiskVisualStyle.sidebar, for: .windowToolbar)
         .tint(DiskVisualStyle.interactionAccent)
         .animation(reduceMotion ? nil : DiskVisualStyle.contentMotion, value: model.appDestination)
-        .toolbar { toolbar }
         .background {
             ThemedWindowChrome(
                 theme: model.themeID,
@@ -131,47 +131,32 @@ struct ContentView: View {
         )
     }
 
-    @ToolbarContentBuilder
-    private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            if model.appDestination == .scan, let session = model.session {
-                DashboardToolbarControls(
-                    selection: $model.dashboardMode,
-                    isScanning: model.selectedLocationIsScanning,
-                    isComplete: session.isComplete,
-                    isHistorical: model.isPresentingHistoricalSnapshot,
-                    scanTelemetry: model.scanTelemetry
-                )
-            }
+    private var canSaveDashboardSnapshot: Bool {
+        !model.isScanning
+            && !model.isSnapshotHistoryBusy
+            && !model.isPresentingHistoricalSnapshot
+            && model.session?.isComplete == true
+            && model.selectedLocationID != nil
+    }
 
-            if model.appDestination == .scan,
-               model.isPresentingHistoricalSnapshot {
-                Button("Current Scan", systemImage: "clock.arrow.circlepath") {
-                    model.selectCurrentSnapshot()
-                }
-                .disabled(model.isSnapshotHistoryBusy)
-                .help("Return to the latest in-memory scan")
-            }
+    private var canZoomOutDashboard: Bool {
+        model.dashboardMode == .map && breadcrumb.count > 1
+    }
 
-            if model.appDestination == .scan, model.session != nil {
-                Button("Save Snapshot", systemImage: "camera") {
-                    Task { await model.saveCurrentSnapshotToHistory() }
-                }
-                .disabled(
-                    model.isScanning
-                        || model.isSnapshotHistoryBusy
-                        || model.isPresentingHistoricalSnapshot
-                        || model.session?.isComplete != true
-                        || model.selectedLocationID == nil
-                )
-                .help("Save this completed scan as an interactive read-only snapshot")
+    private func saveDashboardSnapshot() {
+        Task { await model.saveCurrentSnapshotToHistory() }
+    }
 
-                Button("Zoom Out", systemImage: "arrow.up.left.and.arrow.down.right") {
-                    treemapBridge.zoomOut()
-                }
-                .disabled(model.dashboardMode != .map || breadcrumb.count < 2)
-            }
-        }
+    private var dashboardHeaderControls: DashboardHeaderControls {
+        DashboardHeaderControls(
+            isHistorical: model.isPresentingHistoricalSnapshot,
+            canReturnToCurrent: model.isPresentingHistoricalSnapshot && !model.isSnapshotHistoryBusy,
+            canSaveSnapshot: canSaveDashboardSnapshot,
+            canZoomOut: canZoomOutDashboard,
+            returnToCurrent: model.selectCurrentSnapshot,
+            saveSnapshot: saveDashboardSnapshot,
+            zoomOut: treemapBridge.zoomOut
+        )
     }
 
     @ViewBuilder
@@ -186,7 +171,8 @@ struct ContentView: View {
                     statusLine: model.statusLine,
                     scanTelemetry: model.scanTelemetry,
                     breadcrumb: breadcrumb,
-                    dashboardMode: model.dashboardMode
+                    dashboardMode: $model.dashboardMode,
+                    controls: dashboardHeaderControls
                 )
                 workspace(session: session)
             }
@@ -198,13 +184,16 @@ struct ContentView: View {
                 cancel: model.cancelActiveScan
             )
         } else {
-            EmptyDiskDashboard(
-                selectedRootName: model.activeRoot?.displayName,
-                selectedRootAvailability: model.selectedLocation?.availability,
-                metric: model.sizeMetric,
-                includesHiddenItems: model.showHiddenFiles,
-                groupsAppBundles: model.treatPackagesAsLeaves
-            )
+            GeometryReader { proxy in
+                EmptyDiskDashboard(
+                    selectedRootName: model.activeRoot?.displayName,
+                    selectedRootAvailability: model.selectedLocation?.availability,
+                    metric: model.sizeMetric,
+                    includesHiddenItems: model.showHiddenFiles,
+                    groupsAppBundles: model.treatPackagesAsLeaves
+                )
+                .frame(width: proxy.size.width, height: proxy.size.height)
+            }
         }
     }
 

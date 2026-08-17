@@ -2,16 +2,19 @@
 
 ## Unreleased
 
+## 0.1.1 — 2026-08-17
+
 - Standardized public copy and release tooling on the full Mac Directory Statistics product name.
 - Added explicit, compressed, read-only scan snapshots beneath each saved location, with bounded retention and corruption isolation.
 - Added a drillable Sunburst hierarchy alongside the summary overview.
 - Added native context menus to map blocks and Sunburst sections for opening, previewing, revealing in Finder, copying paths, and adding items to Review.
-- Moved Map/Overview and live snapshot state into the native titlebar toolbar.
+- Placed Map, Overview, snapshot, save, and zoom controls in a compact right-aligned dashboard header.
 - Extended each active theme through the native titlebar and window chrome.
 - Added purpose-made raster app-mark variants for every theme and live theme updates in Settings.
 - Made the sidebar collapsible, slimmed native scrollbars, and stabilized trailing-inspector transitions across selection changes.
 - Removed redundant scan progress from the sidebar and kept one determinate workspace progress bar.
 - Reduced Apps workspace entry work with keyed caches, in-flight deduplication, and bounded icon loading.
+- Fixed the idle workspace and sidebar to remain fully visible at compact non-fullscreen window sizes.
 
 ## 0.1.0 — 2026-08-17
 

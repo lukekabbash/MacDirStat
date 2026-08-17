@@ -10,9 +10,9 @@ struct DiskVisualizerApp: App {
                 .environmentObject(model)
                 .preferredColorScheme(model.appearanceMode.colorScheme)
         }
-        .defaultSize(width: 1_280, height: 800)
+        .defaultSize(width: 1_280, height: 720)
         .windowResizability(.contentMinSize)
-        .windowToolbarStyle(.unifiedCompact(showsTitle: true))
+        .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .appSettings) {

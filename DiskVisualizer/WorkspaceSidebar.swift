@@ -3,6 +3,9 @@ import SwiftUI
 import Treemap
 
 struct WorkspaceSidebar: View {
+    private let sidebarHeaderHeight: CGFloat = 212
+    private let settingsFooterHeight: CGFloat = 44
+
     @EnvironmentObject private var model: AppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selectedNodeID: NodeID?
@@ -18,34 +21,78 @@ struct WorkspaceSidebar: View {
     @Namespace private var nodeSelectionSurface
 
     var body: some View {
-        VStack(spacing: 0) {
-            brand
-            primaryAction
-            destinationList
-            locations
-            if model.appDestination == .scan { scanBrowser }
-            Spacer(minLength: 6)
-            settingsDestination
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                sidebarHeader
+                    .frame(height: sidebarHeaderHeight, alignment: .top)
+                sidebarContent
+                    .frame(
+                        height: max(
+                            0,
+                            geometry.size.height - sidebarHeaderHeight - settingsFooterHeight
+                        )
+                    )
+                    .clipped()
+                settingsDestination
+                    .frame(height: settingsFooterHeight, alignment: .top)
+                    .zIndex(1)
+            }
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                alignment: .top
+            )
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(DiskVisualStyle.sidebar)
+        .background(DiskVisualStyle.sidebar.ignoresSafeArea())
         .sheet(isPresented: $showsNewLocation) { NewLocationSheet() }
         .task(id: searchTaskID) { await updateSearchResults() }
         .onChange(of: model.searchFocusRequest) { _, _ in searchFocused = true }
     }
 
-    private var brand: some View {
+    private var sidebarHeader: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: 8)
+                .accessibilityHidden(true)
+            identityRow
+            primaryAction
+            destinationList
+        }
+    }
+
+    /// Variable-height workspace content has one scroll owner. The app
+    /// identity, primary navigation, and Settings remain visible at every
+    /// supported window height while locations, history, and scan results use
+    /// exactly the space left between them.
+    private var sidebarContent: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                locations
+                if model.appDestination == .scan { scanBrowser }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 6)
+        }
+        .frame(maxWidth: .infinity)
+        .layoutPriority(0)
+        .diskScrollChrome()
+    }
+
+    private var identityRow: some View {
         HStack(spacing: 10) {
-            ThemedAppIcon(theme: model.themeID, size: 30)
+            ThemedAppIcon(theme: model.themeID, size: 32)
                 .accessibilityHidden(true)
             Text("Mac Directory Statistics")
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
-            Spacer(minLength: 4)
+            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 14)
-        .padding(.bottom, 12)
+        .frame(height: 44)
+        .padding(.horizontal, 17)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Mac Directory Statistics")
     }
 
     private var primaryAction: some View {
@@ -58,6 +105,7 @@ struct WorkspaceSidebar: View {
         .controlSize(.large)
         .disabled(model.isScanning)
         .padding(.horizontal, 12)
+        .padding(.top, 6)
         .padding(.bottom, 10)
         .help("Choose a new Mac, folder, or attached volume and start scanning it")
     }
@@ -116,37 +164,33 @@ struct WorkspaceSidebar: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        ForEach(model.orderedLocations) { location in
-                            VStack(spacing: 2) {
-                                SavedLocationRow(
-                                    location: location,
-                                    selected: model.selectedLocationID == location.id,
-                                    scanning: model.activeScanLocationID == location.id && model.isScanning,
-                                    metric: model.sizeMetric,
-                                    selectionNamespace: locationSelectionSurface,
-                                    select: {
-                                        withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
-                                            model.selectLocation(location.id)
-                                        }
-                                    },
-                                    pin: { model.togglePin(location.id) },
-                                    rename: { model.renameLocation(location.id) },
-                                    reveal: { model.revealLocation(location.id) },
-                                    remove: { model.removeLocation(location.id) }
-                                )
+                LazyVStack(spacing: 2) {
+                    ForEach(model.orderedLocations) { location in
+                        VStack(spacing: 2) {
+                            SavedLocationRow(
+                                location: location,
+                                selected: model.selectedLocationID == location.id,
+                                scanning: model.activeScanLocationID == location.id && model.isScanning,
+                                metric: model.sizeMetric,
+                                selectionNamespace: locationSelectionSurface,
+                                select: {
+                                    withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+                                        model.selectLocation(location.id)
+                                    }
+                                },
+                                pin: { model.togglePin(location.id) },
+                                rename: { model.renameLocation(location.id) },
+                                reveal: { model.revealLocation(location.id) },
+                                remove: { model.removeLocation(location.id) }
+                            )
 
-                                if model.selectedLocationID == location.id {
-                                    SidebarSnapshotHistory(location: location, metric: model.sizeMetric)
-                                }
+                            if model.selectedLocationID == location.id {
+                                SidebarSnapshotHistory(location: location, metric: model.sizeMetric)
                             }
                         }
                     }
-                    .padding(.horizontal, 7)
                 }
-                .frame(maxHeight: model.appDestination == .scan ? 260 : .infinity)
-                .diskScrollChrome()
+                .padding(.horizontal, 7)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -220,23 +264,20 @@ struct WorkspaceSidebar: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .padding(.horizontal, 14).padding(.vertical, 6)
 
-                    ScrollView {
-                        LazyVStack(spacing: 2) {
-                            ForEach(displayRows(in: session)) { row in
-                                SidebarNodeRow(
-                                    row: row,
-                                    selected: selectedNodeID == row.id,
-                                    selectionNamespace: nodeSelectionSurface
-                                ) {
-                                    withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
-                                        selectedNodeID = row.id
-                                    }
+                    LazyVStack(spacing: 2) {
+                        ForEach(displayRows(in: session)) { row in
+                            SidebarNodeRow(
+                                row: row,
+                                selected: selectedNodeID == row.id,
+                                selectionNamespace: nodeSelectionSurface
+                            ) {
+                                withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+                                    selectedNodeID = row.id
                                 }
                             }
                         }
-                        .padding(.horizontal, 7)
                     }
-                    .diskScrollChrome()
+                    .padding(.horizontal, 7)
                 } else {
                     VStack(spacing: 7) {
                         Text(model.locationStatusText(location))
@@ -247,10 +288,9 @@ struct WorkspaceSidebar: View {
                             .multilineTextAlignment(.center)
                     }
                     .padding(18)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
             }
-            .frame(maxHeight: .infinity)
         }
     }
 
@@ -268,6 +308,7 @@ struct WorkspaceSidebar: View {
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 10)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var searchTaskID: String {
