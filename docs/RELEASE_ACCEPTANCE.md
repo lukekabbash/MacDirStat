@@ -4,7 +4,7 @@ This checklist translates the current product specification into observable beha
 
 ## Sources and snapshots
 
-- [x] Launch is idle; selecting or restoring a source never starts a scan.
+- [x] Launch is idle; selecting or restoring a saved source never starts a scan. New Scan begins only after the user chooses a source.
 - [x] Full Mac, folder, and attached-volume entry points save source access.
 - [x] Saved sources support select, pin, rename, reveal, and remove-from-list without changing filesystem content.
 - [x] Legacy saved roots migrate without deleting the legacy file.

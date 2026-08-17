@@ -1,3 +1,4 @@
+import AppKit
 import Core
 import SwiftUI
 
@@ -88,7 +89,7 @@ struct SavedLocationRow: View {
                     .frame(width: 17)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(location.displayName).font(.caption.weight(.medium)).lineLimit(1)
-                    Text(scanning ? "Scanning…" : location.lastScanSummary.map { "\(StoragePresentation.bytes($0.size(for: metric))) · \($0.scannedAt.formatted(.relative(presentation: .named)))" } ?? "Ready to scan")
+                    Text(subtitle)
                         .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 3)
@@ -115,6 +116,18 @@ struct SavedLocationRow: View {
             Button("Reveal in Finder", action: reveal)
             Divider()
             Button("Remove from List", role: .destructive, action: remove)
+        }
+    }
+
+    private var subtitle: String {
+        if scanning { return "Scanning…" }
+        switch location.availability {
+        case .needsAccess: return "Reconnect required"
+        case .disconnected: return "Drive unavailable"
+        case .ready:
+            return location.lastScanSummary.map {
+                "\(StoragePresentation.bytes($0.size(for: metric))) · \($0.scannedAt.formatted(.relative(presentation: .named)))"
+            } ?? "Ready to scan"
         }
     }
 }
@@ -210,12 +223,12 @@ struct NewLocationSheet: View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("New Scan").font(.title2.weight(.semibold))
-                Text("Save a location now. Scanning begins only when you press Scan.").font(.subheadline).foregroundStyle(.secondary)
+                Text("Choose a new source. Scanning starts as soon as you grant access.").font(.subheadline).foregroundStyle(.secondary)
             }
             VStack(spacing: 6) {
-                choice("Full Mac", "desktopcomputer", "Map the startup volume after macOS grants access") { dismiss(); model.pickFullMac() }
-                choice("Folder", "folder", "Map one project, home folder, or directory") { dismiss(); model.pickFolder() }
-                choice("Attached Volume", "externaldrive", "Map the root of an external or mounted volume") { dismiss(); model.pickAttachedVolume() }
+                choice("Full Mac", "desktopcomputer", "Grant access and scan the complete startup volume") { dismiss(); model.pickFullMac() }
+                choice("Folder", "folder", "Choose and scan one project, home folder, or directory") { dismiss(); model.pickFolder() }
+                choice("Attached Volume", "externaldrive", "Choose and scan an external or mounted volume") { dismiss(); model.pickAttachedVolume() }
             }
             HStack { Spacer(); Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
         }
@@ -230,5 +243,30 @@ struct NewLocationSheet: View {
             }
             .padding(10).contentShape(Rectangle())
         }.buttonStyle(.plain)
+    }
+}
+
+private struct SidebarScrollViewConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        configure(nsView)
+        DispatchQueue.main.async { [weak nsView] in
+            guard let nsView else { return }
+            configure(nsView)
+        }
+    }
+
+    private func configure(_ view: NSView) {
+        guard let scrollView = view.enclosingScrollView else { return }
+        scrollView.scrollerStyle = .overlay
+        scrollView.autohidesScrollers = true
+        scrollView.verticalScroller?.controlSize = .mini
+    }
+}
+
+extension View {
+    func thinSidebarScroller() -> some View {
+        background(SidebarScrollViewConfigurator())
     }
 }

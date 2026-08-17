@@ -59,9 +59,10 @@ struct WorkspaceSidebar: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+        .disabled(model.isScanning)
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
-        .help("Add a Mac, folder, or attached volume without starting a scan")
+        .help("Choose a new Mac, folder, or attached volume and start scanning it")
     }
 
     private var destinationList: some View {
@@ -111,7 +112,7 @@ struct WorkspaceSidebar: View {
             .padding(.horizontal, 14)
 
             if model.orderedLocations.isEmpty {
-                Text("Add a location to begin. Nothing scans until you press Scan.")
+                Text("Use New Scan to choose a source, or select a saved source and press Scan.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -142,6 +143,7 @@ struct WorkspaceSidebar: View {
                     .padding(.horizontal, 7)
                 }
                 .frame(maxHeight: model.appDestination == .scan ? 176 : .infinity)
+                .thinSidebarScroller()
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -159,8 +161,8 @@ struct WorkspaceSidebar: View {
                         .buttonStyle(.bordered)
                         .disabled(true)
                 } else {
-                        Button(model.snapshot(for: location.id) == nil ? "Scan" : "Refresh") {
-                            model.startScan()
+                        Button(scanButtonTitle(for: location)) {
+                            model.scanSelectedLocation()
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -238,6 +240,7 @@ struct WorkspaceSidebar: View {
                         }
                         .padding(.horizontal, 7)
                     }
+                    .thinSidebarScroller()
                 } else {
                     VStack(spacing: 7) {
                         Text(model.locationStatusText(location))
@@ -279,6 +282,11 @@ struct WorkspaceSidebar: View {
         withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
             model.selectDestination(destination)
         }
+    }
+
+    private func scanButtonTitle(for location: SavedLocation) -> String {
+        guard location.availability == .ready else { return "Reconnect & Scan" }
+        return model.snapshot(for: location.id) == nil ? "Scan" : "Refresh"
     }
 
     private func displayRows(in session: ScanSession) -> [SidebarNodeData] {

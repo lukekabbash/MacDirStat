@@ -262,6 +262,7 @@ struct ScanActivityDetails: View {
 
 struct EmptyDiskDashboard: View {
     let selectedRootName: String?
+    let selectedRootAvailability: LocationAvailability?
     let metric: SizeMetric
     let includesHiddenItems: Bool
     let groupsAppBundles: Bool
@@ -274,7 +275,7 @@ struct EmptyDiskDashboard: View {
                         .font(.caption2.weight(.semibold))
                         .tracking(0.8)
                         .foregroundStyle(.secondary)
-                    Text(selectedRootName.map { "\($0) is ready" } ?? "Choose a scope")
+                    Text(title)
                         .font(.system(size: 22, weight: .semibold))
                         .tracking(-0.3)
                     Text(idleDescription)
@@ -283,9 +284,9 @@ struct EmptyDiskDashboard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 32)
-                Label("Idle", systemImage: "pause.fill")
+                Label(statusLabel, systemImage: statusSymbol)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(DiskVisualStyle.available)
+                    .foregroundStyle(statusColor)
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 22)
@@ -314,9 +315,49 @@ struct EmptyDiskDashboard: View {
     }
 
     private var idleDescription: String {
-        selectedRootName == nil
-            ? "Select the full Mac or a focused folder in the sidebar."
-            : "Nothing runs until you press Scan in the sidebar."
+        guard selectedRootName != nil else {
+            return "Select the full Mac or a focused folder in the sidebar."
+        }
+        switch selectedRootAvailability {
+        case .needsAccess:
+            return "Press Reconnect & Scan to renew macOS access and begin."
+        case .disconnected:
+            return "Reconnect the drive, then press Reconnect & Scan."
+        case .ready, .none:
+            return "Nothing runs until you press Scan in the sidebar."
+        }
+    }
+
+    private var title: String {
+        guard let selectedRootName else { return "Choose a scope" }
+        switch selectedRootAvailability {
+        case .needsAccess: return "Reconnect \(selectedRootName)"
+        case .disconnected: return "\(selectedRootName) is offline"
+        case .ready, .none: return "\(selectedRootName) is ready"
+        }
+    }
+
+    private var statusLabel: String {
+        switch selectedRootAvailability {
+        case .needsAccess: return "Access needed"
+        case .disconnected: return "Offline"
+        case .ready, .none: return "Idle"
+        }
+    }
+
+    private var statusSymbol: String {
+        switch selectedRootAvailability {
+        case .needsAccess: return "key.fill"
+        case .disconnected: return "externaldrive.badge.xmark"
+        case .ready, .none: return "pause.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch selectedRootAvailability {
+        case .needsAccess, .disconnected: return DiskVisualStyle.attention
+        case .ready, .none: return DiskVisualStyle.available
+        }
     }
 }
 

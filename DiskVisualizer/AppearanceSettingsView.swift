@@ -63,7 +63,7 @@ private struct AppearanceSettingsSection: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Theme")
                         .font(.subheadline.weight(.semibold))
-                    Text("Soft Glass is the default. Presets change every semantic surface together.")
+                    Text("Soft Glass is the default. Each preset applies its intended appearance; the control above can override it.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -72,13 +72,13 @@ private struct AppearanceSettingsSection: View {
                     columns: [GridItem(.adaptive(minimum: 182, maximum: 250), spacing: 8)],
                     spacing: 8
                 ) {
-                    ForEach(DiskThemeID.allCases) { theme in
+                    ForEach(DiskThemeID.settingsOrder) { theme in
                         ThemeChoiceCard(
                             theme: theme,
                             isSelected: model.themeID == theme,
                             action: {
                                 withAnimation(reduceMotion ? nil : DiskVisualStyle.themeMotion) {
-                                    model.themeID = theme
+                                    model.selectTheme(theme)
                                 }
                             }
                         )
@@ -96,7 +96,7 @@ private struct ScanningSettingsSection: View {
     var body: some View {
         SettingsGroup(
             title: "Scanning",
-            detail: "These choices apply to the next scan. Choosing a location never starts one."
+            detail: "These choices apply to the next scan. Selecting a saved source stays idle; New Scan begins after you choose one."
         ) {
             SettingsToggleRow(
                 title: "Include hidden items",
@@ -301,13 +301,12 @@ private struct ThemeChoiceCard: View {
     let theme: DiskThemeID
     let isSelected: Bool
     let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                ThemeSwatch(theme: theme, dark: colorScheme == .dark)
+                ThemeSwatch(theme: theme, dark: theme.previewIsDark)
                     .frame(width: 52, height: 34)
 
                 VStack(alignment: .leading, spacing: 2) {

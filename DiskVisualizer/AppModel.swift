@@ -226,6 +226,12 @@ final class AppModel: ObservableObject {
 
     private static let appearanceModeKey = "appearanceMode"
     private static let themeIDKey = "themeID"
+
+    func selectTheme(_ theme: DiskThemeID) {
+        themeID = theme
+        appearanceMode = theme.previewIsDark ? .dark : .light
+    }
+
     private static let themeDefaultsVersionKey = "themeDefaultsVersion"
     private static let showHiddenFilesKey = "showHiddenFiles"
     private static let treatPackagesAsLeavesKey = "treatPackagesAsLeaves"
@@ -288,16 +294,16 @@ final class AppModel: ObservableObject {
         panel.allowsMultipleSelection = false
         switch intent {
         case .folder:
-            panel.message = "Choose a folder to map. Deletion remains disabled until you allow it in Settings."
-            panel.prompt = "Map Folder"
+            panel.message = "Choose a folder to scan now. Deletion remains disabled until you allow it in Settings."
+            panel.prompt = "Choose & Scan"
         case .startupVolume:
             panel.directoryURL = URL(fileURLWithPath: "/", isDirectory: true)
-            panel.message = "Choose Macintosh HD once to map the startup volume. This grants read access; deletion remains disabled."
-            panel.prompt = "Map Full Mac"
+            panel.message = "Choose Macintosh HD to grant access and start a full scan. Deletion remains disabled."
+            panel.prompt = "Scan Full Mac"
         case .attachedVolume:
             panel.directoryURL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
-            panel.message = "Choose the root of an attached volume. Selecting it saves access but does not begin scanning."
-            panel.prompt = "Add Volume"
+            panel.message = "Choose the root of an attached volume to grant access and start scanning it."
+            panel.prompt = "Choose & Scan"
         }
         guard panel.runModal() == .OK, let pickedURL = panel.url else { return }
 
@@ -356,9 +362,9 @@ final class AppModel: ObservableObject {
             accessMode: .readOnly,
             bookmarkData: bookmark
         )
-        addSavedLocation(root)
+        addSavedLocation(root, canonicalPath: canonicalPath(for: url))
         appDestination = .scan
-        statusLine = "\(root.displayName) is ready to scan"
+        startScan()
     }
 
     /// File-change permission is a presentation and intent lock. The selected-folder bookmark

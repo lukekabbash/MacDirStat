@@ -47,7 +47,7 @@ enum DiskThemeCatalog {
                     available: 0x3B7850, attention: 0x916814, neutral: 0x68717D,
                     canvas: 0xF3F1EC, rail: 0xE8E8E4, panel: 0xF8F7F3,
                     layer: 0xFCFBF8, inspector: 0xECEBE6,
-                    border: 0xD7D8D6, borderStrong: 0xA8ADB2, danger: 0xA64C48
+                    border: 0xD7D8D6, borderStrong: 0xA8ADB2, danger: 0xA6504B
                 ),
                 dark: DiskThemeVariant(
                     accent: 0x83A9C8, accentStrong: 0xB3CCDE,

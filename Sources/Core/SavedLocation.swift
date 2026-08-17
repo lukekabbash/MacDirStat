@@ -48,6 +48,10 @@ public struct ScanSummary: Equatable, Codable, Sendable {
 public struct SavedLocation: Identifiable, Equatable, Codable, Sendable {
     public let schemaVersion: Int
     public var scanRoot: ScanRoot
+    /// Stable source identity captured when access is granted. Bookmark data is
+    /// still the access authority; this path only prevents duplicate list rows
+    /// and guides an explicit reconnect when macOS expires that authority.
+    public var canonicalPath: String?
     public var customName: String?
     public var isPinned: Bool
     public var sortOrder: Int
@@ -64,6 +68,7 @@ public struct SavedLocation: Identifiable, Equatable, Codable, Sendable {
 
     public init(
         scanRoot: ScanRoot,
+        canonicalPath: String? = nil,
         customName: String? = nil,
         isPinned: Bool = false,
         sortOrder: Int = 0,
@@ -74,6 +79,7 @@ public struct SavedLocation: Identifiable, Equatable, Codable, Sendable {
     ) {
         self.schemaVersion = schemaVersion
         self.scanRoot = scanRoot
+        self.canonicalPath = canonicalPath
         self.customName = customName
         self.isPinned = isPinned
         self.sortOrder = sortOrder

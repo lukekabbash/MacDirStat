@@ -30,8 +30,12 @@ extension AppModel {
             // File changes never remain armed across an app launch.
             location.scanRoot.accessMode = .readOnly
             location.availability = availability(for: location.scanRoot)
+            if let resolved = resolvedURL(for: location.scanRoot) {
+                location.canonicalPath = canonicalPath(for: resolved)
+            }
             restored.append(location)
         }
+        restored = SavedLocationDeduplicator.collapse(restored)
 
         savedLocations = restored
         reviewItems = loadedReview
@@ -61,14 +65,17 @@ extension AppModel {
         persistLocations()
     }
 
-    func addSavedLocation(_ proposedRoot: ScanRoot) {
-        let proposedPath = resolvedPath(for: proposedRoot)
+    func addSavedLocation(_ proposedRoot: ScanRoot, canonicalPath proposedCanonicalPath: String? = nil) {
+        let proposedPath = proposedCanonicalPath ?? resolvedPath(for: proposedRoot)
         if let proposedPath,
-           let existingIndex = savedLocations.firstIndex(where: { resolvedPath(for: $0.scanRoot) == proposedPath }) {
+           let existingIndex = savedLocations.firstIndex(where: {
+               ($0.canonicalPath ?? resolvedPath(for: $0.scanRoot)) == proposedPath
+           }) {
             var refreshedRoot = proposedRoot
             refreshedRoot.id = savedLocations[existingIndex].id
             refreshedRoot.accessMode = .readOnly
             savedLocations[existingIndex].scanRoot = refreshedRoot
+            savedLocations[existingIndex].canonicalPath = proposedPath
             savedLocations[existingIndex].availability = .ready
             selectLocation(savedLocations[existingIndex].id)
             persistLocations()
@@ -80,6 +87,7 @@ extension AppModel {
         let nextOrder = (savedLocations.map(\.sortOrder).max() ?? -1) + 1
         let location = SavedLocation(
             scanRoot: root,
+            canonicalPath: proposedPath,
             sortOrder: nextOrder,
             availability: .ready,
             lastSelectedAt: Date()
@@ -161,6 +169,22 @@ extension AppModel {
         }
     }
 
+    func scanSelectedLocation() {
+        guard let location = selectedLocation else {
+            statusLine = "Choose a location first."
+            return
+        }
+        guard !isScanning else {
+            statusLine = "One location is already scanning. Stop it before starting another."
+            return
+        }
+        guard locationHasUsableAccess(location) else {
+            reconnectAndScan(location.id)
+            return
+        }
+        startScan()
+    }
+
     func snapshot(for locationID: UUID) -> LocationSnapshot? {
         locationSnapshots[locationID]
     }
@@ -189,9 +213,7 @@ extension AppModel {
 
     func markLocationNeedsAccessIfRequired(_ locationID: UUID) {
         guard let index = savedLocations.firstIndex(where: { $0.id == locationID }) else { return }
-        savedLocations[index].availability = resolvedURL(for: savedLocations[index].scanRoot) == nil
-            ? .needsAccess
-            : .ready
+        savedLocations[index].availability = availability(for: savedLocations[index].scanRoot)
         persistLocations()
     }
 
@@ -234,13 +256,89 @@ extension AppModel {
     }
 
     func resolvedPath(for root: ScanRoot) -> String? {
-        resolvedURL(for: root)?.standardizedFileURL.path
+        resolvedURL(for: root).map(canonicalPath)
+    }
+
+    func canonicalPath(for url: URL) -> String {
+        url.standardizedFileURL.resolvingSymlinksInPath().path
+    }
+
+    private func locationHasUsableAccess(_ location: SavedLocation) -> Bool {
+        guard location.availability == .ready,
+              let url = resolvedURL(for: location.scanRoot)
+        else { return false }
+        let accessed = url.startAccessingSecurityScopedResource()
+        if accessed { url.stopAccessingSecurityScopedResource() }
+        return accessed && FileManager.default.fileExists(atPath: url.path)
+    }
+
+    private func reconnectAndScan(_ locationID: UUID) {
+        guard let index = savedLocations.firstIndex(where: { $0.id == locationID }) else { return }
+        let location = savedLocations[index]
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Grant Access & Scan"
+        panel.message = "Choose “\(location.displayName)” again. Access will be renewed and the scan will start immediately."
+        if let path = location.canonicalPath {
+            panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true)
+        } else if location.availability == .disconnected {
+            panel.directoryURL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        let pickedPath = canonicalPath(for: url)
+        if let expectedPath = location.canonicalPath,
+           canonicalPath(for: URL(fileURLWithPath: expectedPath, isDirectory: true)) != pickedPath {
+            workspaceNotice = .information(
+                title: "Choose the Same Location",
+                message: "Select “\(expectedPath)” to renew this saved source, or use New Scan to add a different one."
+            )
+            return
+        }
+
+        let bookmark: Data
+        do {
+            bookmark = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        } catch {
+            workspaceNotice = .error(
+                title: "Access Could Not Be Saved",
+                message: error.localizedDescription
+            )
+            return
+        }
+
+        let volumeIdentifier = (try? url.resourceValues(forKeys: [.volumeIdentifierKey]).volumeIdentifier)
+            .map { String(describing: $0) }
+        var refreshedRoot = location.scanRoot
+        refreshedRoot.volumeIdentifier = volumeIdentifier
+        refreshedRoot.accessMode = .readOnly
+        refreshedRoot.bookmarkData = bookmark
+        savedLocations[index].scanRoot = refreshedRoot
+        savedLocations[index].canonicalPath = pickedPath
+        savedLocations[index].availability = .ready
+        selectedLocationID = locationID
+        activeRoot = refreshedRoot
+        cleanupControlsEnabled = false
+        appDestination = .scan
+        persistLocations()
+        startScan()
     }
 
     private func availability(for root: ScanRoot) -> LocationAvailability {
         guard let url = resolvedURL(for: root) else { return .needsAccess }
         let accessed = url.startAccessingSecurityScopedResource()
         defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+        guard accessed else {
+            return FileManager.default.fileExists(atPath: url.path)
+                ? .needsAccess
+                : (root.volumeIdentifier == nil ? .needsAccess : .disconnected)
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             return root.volumeIdentifier == nil ? .needsAccess : .disconnected
         }

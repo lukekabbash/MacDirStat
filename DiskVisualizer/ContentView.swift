@@ -163,6 +163,7 @@ struct ContentView: View {
         } else {
             EmptyDiskDashboard(
                 selectedRootName: model.activeRoot?.displayName,
+                selectedRootAvailability: model.selectedLocation?.availability,
                 metric: model.sizeMetric,
                 includesHiddenItems: model.showHiddenFiles,
                 groupsAppBundles: model.treatPackagesAsLeaves

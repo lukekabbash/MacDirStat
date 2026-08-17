@@ -26,7 +26,7 @@ swift test
 
 ## Product boundary
 
-- No automatic scan: restoring or choosing a folder/volume only selects it. Scanning begins after an explicit Scan command.
+- No launch-time scan: restoring or selecting a saved source stays idle. **New Scan** starts after the user explicitly chooses a folder or volume; an existing sidebar source starts from **Scan** or **Refresh**.
 - Saved locations persist access and compact scan summaries only. Each completed location keeps an independent in-memory snapshot; the app never combines unrelated roots into a misleading total or map.
 - Default **allocated** bytes (`URLResourceKey.fileAllocatedSizeKey` / `totalFileAllocatedSizeKey`) with **logical** size shown alongside; APFS clones and shared content mean totals may not match Finder exactly—nodes can surface `mayShareFileContentKey` when the system provides it.
 - **Symlinks are not followed.** **Packages** can be shown as one compact map tile (default), while their contents are measured so their displayed total remains meaningful.

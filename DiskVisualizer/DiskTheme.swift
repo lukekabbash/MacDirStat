@@ -92,6 +92,34 @@ enum DiskThemeID: String, CaseIterable, Identifiable {
     }
 
     var definition: DiskThemeDefinition { DiskThemeCatalog.definition(for: self) }
+
+    /// Mirrors the reference catalog's dark-to-light progression for the
+    /// presets this app supports, with Soft Glass at the light transition.
+    static let settingsOrder: [DiskThemeID] = [
+        .integrator,
+        .dusk,
+        .forest,
+        .ocean,
+        .highContrast,
+        .midnight,
+        .graphite,
+        .iris,
+        .softGlass,
+        .usonian,
+        .paper,
+        .sage,
+        .ash,
+        .porcelain,
+    ]
+
+    var previewIsDark: Bool {
+        switch self {
+        case .integrator, .dusk, .forest, .ocean, .highContrast, .midnight, .graphite, .iris:
+            return true
+        case .softGlass, .usonian, .paper, .sage, .ash, .porcelain:
+            return false
+        }
+    }
 }
 
 struct DiskThemeVariant {
