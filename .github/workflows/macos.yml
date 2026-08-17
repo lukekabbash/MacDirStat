@@ -1,0 +1,17 @@
+name: macOS
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift Package tests
+        run: swift test
+      - name: Build app (Xcode)
+        run: xcodebuild -project DiskVisualizer.xcodeproj -scheme DiskVisualizer -configuration Debug build CODE_SIGNING_ALLOWED=NO

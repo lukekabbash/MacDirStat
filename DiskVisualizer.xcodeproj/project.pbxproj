@@ -1,0 +1,351 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000010000000000000001 /* DiskVisualizerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000001 /* DiskVisualizerApp.swift */; };
+		A10000010000000000000002 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000002 /* AppModel.swift */; };
+		A10000010000000000000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000003 /* ContentView.swift */; };
+		A10000010000000000000004 /* CleanupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000005 /* CleanupService.swift */; };
+		A10000010000000000000005 /* DiskDashboardHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000006 /* DiskDashboardHeader.swift */; };
+		A10000010000000000000006 /* StorageExplorerSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000007 /* StorageExplorerSidebar.swift */; };
+		A10000010000000000000007 /* StorageInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000008 /* StorageInspectorView.swift */; };
+		A10000010000000000000008 /* StorageInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000009 /* StorageInsightsView.swift */; };
+		A10000010000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000A /* Assets.xcassets */; };
+		A1000001000000000000000A /* StorageGroupInspectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000B /* StorageGroupInspectorView.swift */; };
+		A1000001000000000000000B /* VolumeSpaceContextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000C /* VolumeSpaceContextView.swift */; };
+		A1000001000000000000000C /* DiskTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000D /* DiskTheme.swift */; };
+		A1000001000000000000000D /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000E /* AppearanceSettingsView.swift */; };
+		A1000001000000000000000E /* DiskThemePresets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000000F /* DiskThemePresets.swift */; };
+		A1000001000000000000000F /* WorkspaceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000010 /* WorkspaceModels.swift */; };
+		A10000010000000000000010 /* QuickLookService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000011 /* QuickLookService.swift */; };
+		A10000010000000000000011 /* AppModel+Locations.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000012 /* AppModel+Locations.swift */; };
+		A10000010000000000000012 /* AppModel+InventoryReview.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000013 /* AppModel+InventoryReview.swift */; };
+		A10000010000000000000013 /* WorkspaceSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000014 /* WorkspaceSidebar.swift */; };
+		A10000010000000000000014 /* AppsWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000015 /* AppsWorkspaceView.swift */; };
+		A10000010000000000000015 /* ReviewWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000016 /* ReviewWorkspaceView.swift */; };
+		A10000010000000000000016 /* WorkspaceSidebarComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000017 /* WorkspaceSidebarComponents.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000020000000000000001 /* DiskVisualizerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskVisualizerApp.swift; sourceTree = "<group>"; };
+		A10000020000000000000002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		A10000020000000000000003 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A10000020000000000000005 /* CleanupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupService.swift; sourceTree = "<group>"; };
+		A10000020000000000000006 /* DiskDashboardHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskDashboardHeader.swift; sourceTree = "<group>"; };
+		A10000020000000000000007 /* StorageExplorerSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageExplorerSidebar.swift; sourceTree = "<group>"; };
+		A10000020000000000000008 /* StorageInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageInspectorView.swift; sourceTree = "<group>"; };
+		A10000020000000000000009 /* StorageInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageInsightsView.swift; sourceTree = "<group>"; };
+		A1000002000000000000000A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000002000000000000000B /* StorageGroupInspectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorageGroupInspectorView.swift; sourceTree = "<group>"; };
+		A1000002000000000000000C /* VolumeSpaceContextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeSpaceContextView.swift; sourceTree = "<group>"; };
+		A1000002000000000000000D /* DiskTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskTheme.swift; sourceTree = "<group>"; };
+		A1000002000000000000000E /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
+		A1000002000000000000000F /* DiskThemePresets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskThemePresets.swift; sourceTree = "<group>"; };
+		A10000020000000000000010 /* WorkspaceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceModels.swift; sourceTree = "<group>"; };
+		A10000020000000000000011 /* QuickLookService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickLookService.swift; sourceTree = "<group>"; };
+		A10000020000000000000012 /* AppModel+Locations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+Locations.swift"; sourceTree = "<group>"; };
+		A10000020000000000000013 /* AppModel+InventoryReview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "AppModel+InventoryReview.swift"; sourceTree = "<group>"; };
+		A10000020000000000000014 /* WorkspaceSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSidebar.swift; sourceTree = "<group>"; };
+		A10000020000000000000015 /* AppsWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppsWorkspaceView.swift; sourceTree = "<group>"; };
+		A10000020000000000000016 /* ReviewWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewWorkspaceView.swift; sourceTree = "<group>"; };
+		A10000020000000000000017 /* WorkspaceSidebarComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceSidebarComponents.swift; sourceTree = "<group>"; };
+		A10000020000000000000004 /* DiskVisualizer.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DiskVisualizer.entitlements; sourceTree = "<group>"; };
+		A10000030000000000000001 /* DiskVisualizer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DiskVisualizer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000040000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000050000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A10000050000000000000002 /* DiskVisualizer */,
+				A10000050000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000050000000000000002 /* DiskVisualizer */ = {
+			isa = PBXGroup;
+			children = (
+				A10000020000000000000001 /* DiskVisualizerApp.swift */,
+				A10000020000000000000002 /* AppModel.swift */,
+				A10000020000000000000012 /* AppModel+Locations.swift */,
+				A10000020000000000000013 /* AppModel+InventoryReview.swift */,
+				A10000020000000000000003 /* ContentView.swift */,
+				A10000020000000000000010 /* WorkspaceModels.swift */,
+				A10000020000000000000014 /* WorkspaceSidebar.swift */,
+				A10000020000000000000017 /* WorkspaceSidebarComponents.swift */,
+				A10000020000000000000015 /* AppsWorkspaceView.swift */,
+				A10000020000000000000016 /* ReviewWorkspaceView.swift */,
+				A10000020000000000000011 /* QuickLookService.swift */,
+				A10000020000000000000005 /* CleanupService.swift */,
+				A10000020000000000000006 /* DiskDashboardHeader.swift */,
+				A10000020000000000000007 /* StorageExplorerSidebar.swift */,
+				A10000020000000000000008 /* StorageInspectorView.swift */,
+				A10000020000000000000009 /* StorageInsightsView.swift */,
+				A1000002000000000000000B /* StorageGroupInspectorView.swift */,
+				A1000002000000000000000C /* VolumeSpaceContextView.swift */,
+				A1000002000000000000000D /* DiskTheme.swift */,
+				A1000002000000000000000F /* DiskThemePresets.swift */,
+				A1000002000000000000000E /* AppearanceSettingsView.swift */,
+				A1000002000000000000000A /* Assets.xcassets */,
+				A10000020000000000000004 /* DiskVisualizer.entitlements */,
+			);
+			path = DiskVisualizer;
+			sourceTree = "<group>";
+		};
+		A10000050000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000030000000000000001 /* DiskVisualizer.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000060000000000000001 /* DiskVisualizer */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000070000000000000002 /* Build configuration list for PBXNativeTarget "DiskVisualizer" */;
+			buildPhases = (
+				A10000080000000000000001 /* Sources */,
+				A10000040000000000000001 /* Frameworks */,
+				A10000090000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DiskVisualizer;
+			packageProductDependencies = (
+				A100000A0000000000000001 /* Core */,
+				A100000A0000000000000002 /* Treemap */,
+			);
+			productName = DiskVisualizer;
+			productReference = A10000030000000000000001 /* DiskVisualizer.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A100000B0000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A10000060000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000070000000000000001 /* Build configuration list for PBXProject "DiskVisualizer" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A10000050000000000000001;
+			packageReferences = (
+				A100000C0000000000000001 /* XCLocalSwiftPackageReference "." */,
+			);
+			productRefGroup = A10000050000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000060000000000000001 /* DiskVisualizer */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000090000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000009 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000080000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000010000000000000001 /* DiskVisualizerApp.swift in Sources */,
+				A10000010000000000000002 /* AppModel.swift in Sources */,
+				A10000010000000000000003 /* ContentView.swift in Sources */,
+				A10000010000000000000004 /* CleanupService.swift in Sources */,
+				A10000010000000000000005 /* DiskDashboardHeader.swift in Sources */,
+				A10000010000000000000006 /* StorageExplorerSidebar.swift in Sources */,
+				A10000010000000000000007 /* StorageInspectorView.swift in Sources */,
+				A10000010000000000000008 /* StorageInsightsView.swift in Sources */,
+				A1000001000000000000000A /* StorageGroupInspectorView.swift in Sources */,
+				A1000001000000000000000B /* VolumeSpaceContextView.swift in Sources */,
+				A1000001000000000000000C /* DiskTheme.swift in Sources */,
+				A1000001000000000000000E /* DiskThemePresets.swift in Sources */,
+				A1000001000000000000000D /* AppearanceSettingsView.swift in Sources */,
+				A1000001000000000000000F /* WorkspaceModels.swift in Sources */,
+				A10000010000000000000010 /* QuickLookService.swift in Sources */,
+				A10000010000000000000011 /* AppModel+Locations.swift in Sources */,
+				A10000010000000000000012 /* AppModel+InventoryReview.swift in Sources */,
+				A10000010000000000000013 /* WorkspaceSidebar.swift in Sources */,
+				A10000010000000000000014 /* AppsWorkspaceView.swift in Sources */,
+				A10000010000000000000015 /* ReviewWorkspaceView.swift in Sources */,
+				A10000010000000000000016 /* WorkspaceSidebarComponents.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A100000D0000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A100000D0000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		A100000D0000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = DiskVisualizer/DiskVisualizer.entitlements;
+				CODE_SIGNING_ALLOWED = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mac Directory Statistics";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Mac Directory Statistics contributors. MIT License.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.macdirstat;
+				PRODUCT_NAME = "Mac Directory Statistics";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A100000D0000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = DiskVisualizer/DiskVisualizer.entitlements;
+				CODE_SIGNING_ALLOWED = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Mac Directory Statistics";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Mac Directory Statistics contributors. MIT License.";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.macdirstat;
+				PRODUCT_NAME = "Mac Directory Statistics";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000070000000000000001 /* Build configuration list for PBXProject "DiskVisualizer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A100000D0000000000000001 /* Debug */,
+				A100000D0000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000070000000000000002 /* Build configuration list for PBXNativeTarget "DiskVisualizer" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A100000D0000000000000003 /* Debug */,
+				A100000D0000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A100000C0000000000000001 /* XCLocalSwiftPackageReference "." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = .;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A100000A0000000000000001 /* Core */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Core;
+			package = A100000C0000000000000001 /* XCLocalSwiftPackageReference "." */;
+		};
+		A100000A0000000000000002 /* Treemap */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Treemap;
+			package = A100000C0000000000000001 /* XCLocalSwiftPackageReference "." */;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A100000B0000000000000001 /* Project object */;
+}
