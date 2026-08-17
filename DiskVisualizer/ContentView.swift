@@ -9,7 +9,7 @@ struct ContentView: View {
     @StateObject private var treemapBridge = TreemapBridge()
     @State private var breadcrumb: [NodeID] = [.root]
     @State private var confirmTrash = false
-    @State private var pendingTrashPath: String?
+    @State private var pendingAction: StorageActionRequest?
     @State private var confirmMove = false
     @State private var pendingMove: MoveRequest?
 
@@ -33,13 +33,17 @@ struct ContentView: View {
             OnboardingView(onContinue: model.dismissOnboarding)
         }
         .alert("Move to Trash?", isPresented: $confirmTrash) {
-            Button("Cancel", role: .cancel) { pendingTrashPath = nil }
+            Button("Cancel", role: .cancel) { pendingAction = nil }
             Button("Move to Trash", role: .destructive) {
-                if let pendingTrashPath { performTrash(path: pendingTrashPath) }
-                pendingTrashPath = nil
+                if let pendingAction { performTrash(pendingAction) }
+                pendingAction = nil
             }
         } message: {
-            Text("This item will move to Trash, then the snapshot will refresh. Nothing is permanently deleted by this action.")
+            Text(pendingAction.map { request in
+                request.isApplication
+                    ? "Only the app bundle “\(request.displayName)” will move to Trash. Support files and documents may remain. The source snapshot will be invalidated."
+                    : "“\(request.displayName)” will move to Trash. The source snapshot will be invalidated and will not refresh automatically."
+            } ?? "This item will move to Trash.")
         }
         .alert("Move item?", isPresented: $confirmMove) {
             Button("Cancel", role: .cancel) { pendingMove = nil }
@@ -52,37 +56,65 @@ struct ContentView: View {
                 "Move \($0.source.lastPathComponent) into \($0.destination.lastPathComponent)? Existing files will not be overwritten."
             } ?? "Choose a destination folder before moving an item.")
         }
+        .alert(
+            model.workspaceNotice?.title ?? "Notice",
+            isPresented: Binding(
+                get: { model.workspaceNotice != nil },
+                set: { if !$0 { model.workspaceNotice = nil } }
+            )
+        ) {
+            Button("OK") { model.workspaceNotice = nil }
+        } message: {
+            Text(model.workspaceNotice?.message ?? "")
+        }
+        .onKeyPress(.space) {
+            model.quickLookSelected()
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard model.appDestination == .scan,
+                  model.dashboardMode == .map,
+                  let selected = model.selectedNodeID,
+                  model.session?.node(id: selected)?.kind == .directory
+            else { return .ignored }
+            treemapBridge.zoomInto(selected)
+            return .handled
+        }
+        .onKeyPress(.escape) {
+            guard model.appDestination == .scan,
+                  model.dashboardMode == .map,
+                  breadcrumb.count > 1
+            else { return .ignored }
+            treemapBridge.zoomOut()
+            return .handled
+        }
     }
 
     @ViewBuilder
     private var sidebar: some View {
-        StorageExplorerSidebar(
-            session: model.session,
-            activeRoot: model.activeRoot,
-            focusNodeID: model.focusedNodeID,
-            isScanning: model.isScanning,
-            scanTelemetry: model.scanTelemetry,
-            selectedNodeID: selectedNodeBinding,
-            metric: $model.sizeMetric,
-            isShowingSettings: model.appDestination == .settings,
-            chooseFullMac: model.pickFullMac,
-            chooseFolder: model.pickFolder,
-            startScan: model.startScan,
-            cancelScan: model.cancelActiveScan,
-            toggleSettings: {
-                model.appDestination == .settings ? model.closeSettings() : model.openSettings()
-            }
-        )
+        WorkspaceSidebar(selectedNodeID: selectedNodeBinding)
     }
 
     @ViewBuilder
     private var destinationCanvas: some View {
-        if model.appDestination == .settings {
+        switch model.appDestination {
+        case .scan:
+            dashboard.transition(.opacity)
+        case .apps:
+            AppsWorkspaceView(
+                requestTrash: { requestTrash(locationID: $0, path: $1, name: $2, isApplication: $3) },
+                requestMove: { requestMove(locationID: $0, path: $1, name: $2, isApplication: $3) }
+            )
+                .transition(.opacity)
+        case .review:
+            ReviewWorkspaceView(
+                requestTrash: { requestTrash(locationID: $0, path: $1, name: $2, isApplication: $3) },
+                requestMove: { requestMove(locationID: $0, path: $1, name: $2, isApplication: $3) }
+            )
+                .transition(.opacity)
+        case .settings:
             SettingsCanvas()
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
-        } else {
-            dashboard
-                .transition(.opacity)
         }
     }
 
@@ -96,7 +128,7 @@ struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            if model.appDestination == .workspace, model.session != nil {
+            if model.appDestination == .scan, model.session != nil {
                 Button("Zoom Out", systemImage: "arrow.up.left.and.arrow.down.right") {
                     treemapBridge.zoomOut()
                 }
@@ -112,7 +144,7 @@ struct ContentView: View {
                 DiskDashboardHeader(
                     session: session,
                     metric: model.sizeMetric,
-                    isScanning: model.isScanning,
+                    isScanning: model.selectedLocationIsScanning,
                     scannedNodeCount: model.scannedNodeCount,
                     statusLine: model.statusLine,
                     scanTelemetry: model.scanTelemetry,
@@ -122,7 +154,7 @@ struct ContentView: View {
                 workspace(session: session)
             }
             .background(DiskVisualStyle.canvas)
-        } else if model.isScanning {
+        } else if model.selectedLocationIsScanning {
             FirstScanView(
                 rootName: model.activeRoot?.displayName ?? "Location",
                 scanTelemetry: model.scanTelemetry,
@@ -193,6 +225,8 @@ struct ContentView: View {
                 metric: model.sizeMetric,
                 cleanupControlsEnabled: model.cleanupControlsEnabled,
                 close: { selectNode(nil) },
+                quickLook: { _ in model.quickLookSelected() },
+                addToReview: model.addSelectedNodeToReview,
                 reveal: { CleanupService().revealInFinder(path: $0) },
                 open: { CleanupService().openFile(path: $0) },
                 move: requestMove,
@@ -275,25 +309,71 @@ struct ContentView: View {
     }
 
     private func requestTrash(path: String) {
-        guard model.cleanupControlsEnabled else { return }
-        pendingTrashPath = path
+        guard let locationID = model.selectedLocationID else { return }
+        requestTrash(
+            locationID: locationID,
+            path: path,
+            name: URL(fileURLWithPath: path).lastPathComponent,
+            isApplication: path.lowercased().hasSuffix(".app")
+        )
+    }
+
+    private func requestTrash(locationID: UUID, path: String, name: String, isApplication: Bool) {
+        let request = StorageActionRequest(kind: .moveToTrash, locationID: locationID, path: path, displayName: name, isApplication: isApplication)
+        let eligibility = model.actionEligibility(for: request, action: .moveToTrash)
+        guard eligibility.isEnabled else {
+            model.workspaceNotice = .information(title: "Move Unavailable", message: eligibility.reason ?? "This item cannot be moved.")
+            return
+        }
+        pendingAction = request
         confirmTrash = true
     }
 
-    private func performTrash(path: String) {
+    private func performTrash(_ request: StorageActionRequest) {
         Task { @MainActor in
+            guard let root = model.sourceRoot(for: request.locationID),
+                  let sourceURL = model.resolvedURL(for: root)
+            else {
+                model.workspaceNotice = .error(title: "Source Unavailable", message: "Reconnect or grant access to this source before changing it.")
+                return
+            }
+            let accessed = sourceURL.startAccessingSecurityScopedResource()
+            defer { if accessed { sourceURL.stopAccessingSecurityScopedResource() } }
+            let eligibility = model.actionEligibility(for: request, action: .moveToTrash)
+            guard eligibility.isEnabled,
+                  let node = model.currentNode(for: request),
+                  CleanupService().matchesSnapshot(path: request.path, node: node)
+            else {
+                model.workspaceNotice = .error(title: "Item Changed", message: "The item no longer matches the current snapshot. Refresh the source before trying again.")
+                return
+            }
             do {
-                try CleanupService().moveToTrash(path: path)
-                model.statusLine = "Moved to Trash · refreshing in the background"
-                model.startScan()
+                try CleanupService().moveToTrash(path: request.path)
+                model.markActionComplete(locationID: request.locationID, path: request.path, note: "Moved to Trash")
+                model.workspaceNotice = .information(title: "Moved to Trash", message: "The source snapshot is now invalid and was not refreshed automatically.")
             } catch {
-                model.statusLine = "Could not move item to Trash · \(error.localizedDescription)"
+                model.workspaceNotice = .error(title: "Could Not Move Item", message: error.localizedDescription)
             }
         }
     }
 
     private func requestMove(path: String) {
-        guard model.cleanupControlsEnabled else { return }
+        guard let locationID = model.selectedLocationID else { return }
+        requestMove(
+            locationID: locationID,
+            path: path,
+            name: URL(fileURLWithPath: path).lastPathComponent,
+            isApplication: path.lowercased().hasSuffix(".app")
+        )
+    }
+
+    private func requestMove(locationID: UUID, path: String, name: String, isApplication: Bool) {
+        let request = StorageActionRequest(kind: .moveToFolder, locationID: locationID, path: path, displayName: name, isApplication: isApplication)
+        let initialEligibility = model.actionEligibility(for: request, action: .moveToFolder)
+        guard initialEligibility.isEnabled else {
+            model.workspaceNotice = .information(title: "Move Unavailable", message: initialEligibility.reason ?? "This item cannot be moved.")
+            return
+        }
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -301,18 +381,43 @@ struct ContentView: View {
         panel.message = "Choose a destination. You will confirm the move before anything changes."
         panel.prompt = "Choose Destination"
         guard panel.runModal() == .OK, let destination = panel.url else { return }
-        pendingMove = MoveRequest(source: URL(fileURLWithPath: path), destination: destination)
+        let relationship = CleanupService().volumeRelationship(sourcePath: path, destinationPath: destination.path)
+        guard relationship == .same else {
+            let message = relationship == .different
+                ? "Transfers between volumes are not available yet. Choose a folder on the same volume."
+                : "The destination volume could not be verified, so the move was not enabled."
+            model.workspaceNotice = .information(title: "Same Volume Required", message: message)
+            return
+        }
+        pendingMove = MoveRequest(request: request, source: URL(fileURLWithPath: path), destination: destination)
         confirmMove = true
     }
 
     private func performMove(_ request: MoveRequest) {
         Task { @MainActor in
+            guard let root = model.sourceRoot(for: request.request.locationID),
+                  let sourceRootURL = model.resolvedURL(for: root)
+            else {
+                model.workspaceNotice = .error(title: "Source Unavailable", message: "Reconnect or grant access before moving this item.")
+                return
+            }
+            let accessed = sourceRootURL.startAccessingSecurityScopedResource()
+            defer { if accessed { sourceRootURL.stopAccessingSecurityScopedResource() } }
+            let relationship = CleanupService().volumeRelationship(sourcePath: request.source.path, destinationPath: request.destination.path)
+            let eligibility = model.actionEligibility(for: request.request, action: .moveToFolder, sameVolumeDestination: relationship == .same)
+            guard eligibility.isEnabled,
+                  let node = model.currentNode(for: request.request),
+                  CleanupService().matchesSnapshot(path: request.source.path, node: node)
+            else {
+                model.workspaceNotice = .error(title: "Move Blocked", message: eligibility.reason ?? "The item changed since the snapshot was created.")
+                return
+            }
             do {
                 try CleanupService().moveItem(path: request.source.path, to: request.destination.path)
-                model.statusLine = "Moved \(request.source.lastPathComponent) · refreshing in the background"
-                model.startScan()
+                model.markActionComplete(locationID: request.request.locationID, path: request.source.path, note: "Moved to \(request.destination.path)")
+                model.workspaceNotice = .information(title: "Item Moved", message: "The source snapshot is now invalid and was not refreshed automatically.")
             } catch {
-                model.statusLine = "Could not move item · \(error.localizedDescription)"
+                model.workspaceNotice = .error(title: "Could Not Move Item", message: error.localizedDescription)
             }
         }
     }
@@ -410,6 +515,7 @@ private struct MapLegendStrip: View {
 }
 
 private struct MoveRequest {
+    let request: StorageActionRequest
     let source: URL
     let destination: URL
 }

@@ -6,9 +6,9 @@ Mac Directory Statistics (`macdirstat`) is a native macOS storage explorer with 
 
 | Area | Role |
 |------|------|
-| `Sources/Core` | `ScanRoot`, `ScanOptions`, `ScanSession`, `FileNode`, `ScanEngine`, `BookmarkStore`, treemap layout math, types |
+| `Sources/Core` | Scanning, saved-location persistence, source-aware projections, review validation, treemap layout math, and shared action eligibility |
 | `Sources/Treemap` | AppKit treemap surface + SwiftUI bridge |
-| `DiskVisualizer/` | App target: onboarding, map/snapshot dashboard, inspector, guarded file actions |
+| `DiskVisualizer/` | App target: saved-location rail, Scan, Apps, Review, Settings, inspectors, Quick Look, and guarded file actions |
 | `DiskVisualizer.xcodeproj` | Ships the sandboxed `.app` and links local Swift packages |
 
 **License:** MIT. **Platform:** macOS 14+ (universal binary when archived in Xcode).
@@ -27,11 +27,13 @@ swift test
 ## Product boundary
 
 - No automatic scan: restoring or choosing a folder/volume only selects it. Scanning begins after an explicit Scan command.
+- Saved locations persist access and compact scan summaries only. Each completed location keeps an independent in-memory snapshot; the app never combines unrelated roots into a misleading total or map.
 - Default **allocated** bytes (`URLResourceKey.fileAllocatedSizeKey` / `totalFileAllocatedSizeKey`) with **logical** size shown alongside; APFS clones and shared content mean totals may not match Finder exactly—nodes can surface `mayShareFileContentKey` when the system provides it.
 - **Symlinks are not followed.** **Packages** can be shown as one compact map tile (default), while their contents are measured so their displayed total remains meaningful.
 - The map can color by **file type** or **top-level location**. The overview has a donut, ranked bar chart, aggregate inspectors, and a largest-items list, all grouped without directory double-counting.
+- **Apps** is a projection of app bundles found in completed snapshots, with its source and snapshot date always visible. **Review** contains only items the user explicitly adds from Scan or Apps.
 - The always-visible capacity strip shows physical used and available space for the containing volume. The optional **Capacity** map mode also represents free space and used space outside the selected scan without changing the underlying folder snapshot.
-- Deletion is disabled by default. Once the user enables it for a selected root, Move… and Move to Trash both require a final confirmation; Trash is never emptied by the app.
+- Deletion is disabled independently for every source and resets to off on launch. Once enabled, an item is rechecked against its owning snapshot before Move… or Move to Trash; moves are limited to the same volume, every change requires confirmation, successful changes invalidate the source snapshot, and Trash is never emptied by the app.
 
 ## Responsiveness
 
@@ -39,14 +41,9 @@ swift test
 - Direct-child links are captured while scanning, so navigation and treemap rebuilds do not search the entire node list just to open a folder.
 - Overview computation runs off the main actor and keeps only compact group totals and a small largest-item shortlist.
 
-## Roadmap (summary)
+## Deliberate non-goals for this release
 
-The spec in your product brief maps to this repo as follows:
-
-- **Phase 0 (foundation):** sandbox entitlements, bookmarks, progressive scan snapshots, treemap + drill-down — *in progress here*.
-- **Phase 1 (MVP):** targeted rescan after file actions, Move…, richer capability messaging, performance tuning.
-- **Phase 2 (beta):** FSEvents “something changed” hints, exclusions, pinned roots, compaction.
-- **Phase 3 (launch):** MAS vs direct lanes, privacy manifest, smart filters, marketing assets.
+The app does not run background scans, build aggregate cross-volume maps, execute cross-volume transfers, find duplicates, or automate cleanup. Those workflows need separate state and recovery models; they are not disguised as extensions of the current source-scoped snapshot.
 
 ## CI
 

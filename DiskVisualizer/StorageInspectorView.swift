@@ -9,6 +9,8 @@ struct StorageInspectorView: View {
     let metric: SizeMetric
     let cleanupControlsEnabled: Bool
     let close: () -> Void
+    let quickLook: (String) -> Void
+    let addToReview: () -> Void
     let reveal: (String) -> Void
     let open: (String) -> Void
     let move: (String) -> Void
@@ -123,12 +125,21 @@ struct StorageInspectorView: View {
             InspectorSectionLabel("Actions")
 
             HStack(spacing: 8) {
-                Button("Reveal in Finder") { reveal(node.path) }
+                Button("Quick Look") { quickLook(node.path) }
                     .buttonStyle(.borderedProminent)
                     .disabled(!hasPath)
                 Button("Open") { open(node.path) }
                     .buttonStyle(.bordered)
                     .disabled(!hasPath)
+            }
+
+            HStack(spacing: 8) {
+                Button("Reveal in Finder") { reveal(node.path) }
+                    .buttonStyle(.bordered)
+                    .disabled(!hasPath)
+                Button("Add to Review", action: addToReview)
+                    .buttonStyle(.bordered)
+                    .disabled(!canMutate)
             }
 
             if cleanupControlsEnabled {

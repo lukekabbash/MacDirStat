@@ -57,7 +57,7 @@ struct DiskDashboardHeader: View {
                     .frame(minWidth: 170, maxWidth: 310, alignment: .leading)
 
                 Group {
-                    if let activity = scanTelemetry.activity {
+                    if isScanning, let activity = scanTelemetry.activity {
                         CompactScanActivity(activity: activity)
                     } else {
                         Text("\(StoragePresentation.bytes(currentSize)) · \(visibleItemCount.formatted()) items")
@@ -72,13 +72,13 @@ struct DiskDashboardHeader: View {
                 DashboardModeControl(selection: $dashboardMode)
                     .frame(width: 166)
 
-                ScanStateBadge(activity: scanTelemetry.activity, isComplete: session.isComplete)
+                ScanStateBadge(activity: isScanning ? scanTelemetry.activity : nil, isComplete: session.isComplete)
                     .frame(width: 74, alignment: .trailing)
             }
             .padding(.horizontal, 12)
             .frame(height: 43)
 
-            if let activity = scanTelemetry.activity {
+            if isScanning, let activity = scanTelemetry.activity {
                 ProgressView(value: activity.fractionCompleted ?? 0)
                     .progressViewStyle(.linear)
                     .tint(DiskVisualStyle.accent)

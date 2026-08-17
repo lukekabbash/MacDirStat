@@ -21,6 +21,16 @@ struct DiskVisualizerApp: App {
                 }
                 .keyboardShortcut(",", modifiers: .command)
             }
+            CommandMenu("Navigate") {
+                Button("Find in Snapshot") { model.requestSearchFocus() }
+                    .keyboardShortcut("f", modifiers: .command)
+                Button("Quick Look") { model.quickLookSelected() }
+                    .keyboardShortcut(" ", modifiers: [])
+                Divider()
+                Button("Add to Review") { model.addSelectedNodeToReview() }
+                    .keyboardShortcut("r", modifiers: [.command, .shift])
+                    .disabled(model.appDestination != .scan || model.selectedNodeID == nil)
+            }
         }
     }
 }

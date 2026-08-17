@@ -14,6 +14,10 @@ public final class TreemapBridge: ObservableObject {
         view?.zoomOut()
     }
 
+    public func zoomInto(_ nodeID: NodeID) {
+        view?.zoomInto(nodeID)
+    }
+
     public func resetZoom() {
         view?.resetZoom()
     }

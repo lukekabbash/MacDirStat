@@ -17,7 +17,9 @@ enum DashboardMode: String, CaseIterable {
 }
 
 enum AppDestination: String, CaseIterable {
-    case workspace
+    case scan
+    case apps
+    case review
     case settings
 }
 
@@ -100,7 +102,7 @@ struct VolumeSpaceSnapshot: Equatable, Sendable {
     }
 }
 
-private final class CancellationState: @unchecked Sendable {
+final class CancellationState: @unchecked Sendable {
     private let lock = NSLock()
     private var cancelled = false
 
@@ -126,7 +128,24 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(themeID.rawValue, forKey: Self.themeIDKey) }
     }
     @Published var session: ScanSession?
-    @Published var appDestination: AppDestination = .workspace
+    @Published var appDestination: AppDestination = .scan {
+        didSet {
+            if appDestination == .apps { prepareAppInventory() }
+        }
+    }
+    @Published var savedLocations: [SavedLocation] = []
+    @Published var selectedLocationID: UUID?
+    @Published var snapshotCatalogRevision = 0
+    @Published var reviewItems: [ReviewItem] = []
+    @Published var selectedReviewItemID: UUID?
+    @Published var appInventoryScope: AppInventoryScope = .selectedLocation {
+        didSet { prepareAppInventory() }
+    }
+    @Published var appInventory: [AppInventoryItem] = []
+    @Published var selectedAppInventoryID: String?
+    @Published var isPreparingAppInventory = false
+    @Published var workspaceNotice: WorkspaceNotice?
+    @Published var searchFocusRequest = 0
     @Published private(set) var sessionRevision = 0
     @Published var sizeMetric: SizeMetric = .allocated {
         didSet {
@@ -134,6 +153,7 @@ final class AppModel: ObservableObject {
             prepareOverviewIfNeeded()
             prepareSelectedOverviewGroupIfNeeded()
             prepareMapLegendIfNeeded()
+            prepareAppInventory()
         }
     }
     @Published var dashboardMode: DashboardMode = .map {
@@ -182,13 +202,19 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(showFreeSpaceInMap, forKey: Self.showFreeSpaceKey) }
     }
     @Published private(set) var volumeSpace: VolumeSpaceSnapshot?
-    @Published private(set) var cleanupControlsEnabled = false
+    @Published var cleanupControlsEnabled = false
     @Published var showOnboarding = !UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
 
     private let engine = ScanEngine()
-    private var activeCancellationState: CancellationState?
-    private var activeScanID = UUID()
-    private var scanTask: Task<Void, Never>?
+    let quickLookService = QuickLookService()
+    let savedLocationStore = SavedLocationStore.default
+    let reviewStore = ReviewStore.default
+    var locationSnapshots: [UUID: LocationSnapshot] = [:]
+    var activeCancellationState: CancellationState?
+    var activeScanID = UUID()
+    var activeScanLocationID: UUID?
+    var scanTask: Task<Void, Never>?
+    var appInventoryTask: Task<Void, Never>?
     private var overviewTask: Task<Void, Never>?
     private var overviewGroupTask: Task<Void, Never>?
     private var mapLegendTask: Task<Void, Never>?
@@ -224,30 +250,7 @@ final class AppModel: ObservableObject {
         calculatesExactProgress = Self.storedBool(Self.exactProgressKey, default: true)
         showFreeSpaceInMap = Self.storedBool(Self.showFreeSpaceKey, default: false)
 
-        Task {
-            try? await BookmarkStore.default.load()
-            let roots = await BookmarkStore.default.allRoots()
-            await MainActor.run {
-                if var last = roots.last {
-                    var stale = false
-                    if let url = try? URL(
-                        resolvingBookmarkData: last.bookmarkData,
-                        options: [.withSecurityScope, .withoutUI],
-                        relativeTo: nil,
-                        bookmarkDataIsStale: &stale
-                    ), url.standardizedFileURL.path == "/" {
-                        let name = try? url.resourceValues(forKeys: [.volumeNameKey]).volumeName
-                        last.displayName = name ?? "Macintosh HD"
-                    }
-                    // Restore intent, never work. Launching the app must be an
-                    // idle operation; the user explicitly starts every scan.
-                    last.accessMode = .readOnly
-                    self.activeRoot = last
-                    self.statusLine = "\(last.displayName) is ready to scan"
-                    Task { try? await BookmarkStore.default.upsert(last) }
-                }
-            }
-        }
+        Task { await restorePersistentWorkspace() }
     }
 
     private static func storedBool(_ key: String, default defaultValue: Bool) -> Bool {
@@ -268,14 +271,17 @@ final class AppModel: ObservableObject {
         pickLocation(.startupVolume)
     }
 
+    func pickAttachedVolume() {
+        pickLocation(.attachedVolume)
+    }
+
     private enum LocationIntent {
         case folder
         case startupVolume
+        case attachedVolume
     }
 
     private func pickLocation(_ intent: LocationIntent) {
-        cancelActiveScan()
-
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -288,6 +294,10 @@ final class AppModel: ObservableObject {
             panel.directoryURL = URL(fileURLWithPath: "/", isDirectory: true)
             panel.message = "Choose Macintosh HD once to map the startup volume. This grants read access; deletion remains disabled."
             panel.prompt = "Map Full Mac"
+        case .attachedVolume:
+            panel.directoryURL = URL(fileURLWithPath: "/Volumes", isDirectory: true)
+            panel.message = "Choose the root of an attached volume. Selecting it saves access but does not begin scanning."
+            panel.prompt = "Add Volume"
         }
         guard panel.runModal() == .OK, let pickedURL = panel.url else { return }
 
@@ -295,16 +305,16 @@ final class AppModel: ObservableObject {
         switch intent {
         case .folder:
             url = pickedURL
-        case .startupVolume:
+        case .startupVolume, .attachedVolume:
             // A full-volume map must include hidden locations such as /private
             // and user Library data or it materially understates disk use.
             showHiddenFiles = true
             guard let volumeURL = try? pickedURL.resourceValues(forKeys: [.volumeURLKey]).volume else {
-                statusLine = "Could not resolve the selected startup volume."
+                statusLine = "Could not resolve the selected volume."
                 return
             }
             guard pickedURL.standardizedFileURL.path == volumeURL.standardizedFileURL.path else {
-                statusLine = "Choose Macintosh HD itself, not a folder inside it."
+                statusLine = "Choose the volume itself, not a folder inside it."
                 return
             }
             url = volumeURL
@@ -346,18 +356,8 @@ final class AppModel: ObservableObject {
             accessMode: .readOnly,
             bookmarkData: bookmark
         )
-        activeRoot = root
-        cleanupControlsEnabled = false
-        publishSession(nil)
-        overviewGroups = []
-        overviewLargestNodeIDs = []
-        mapFileTypeGroups = []
-        mapLocationGroups = []
-        volumeSpace = nil
-        selectOverviewGroup(nil)
-        selectNode(nil)
-        Task { try? await BookmarkStore.default.upsert(root) }
-        appDestination = .workspace
+        addSavedLocation(root)
+        appDestination = .scan
         statusLine = "\(root.displayName) is ready to scan"
     }
 
@@ -365,11 +365,17 @@ final class AppModel: ObservableObject {
     /// already supplies the underlying read-write scope, so toggling it should
     /// never force an expensive filesystem rescan.
     func setCleanupControls(enabled: Bool) {
+        guard let id = selectedLocationID,
+              let index = savedLocations.firstIndex(where: { $0.id == id })
+        else {
+            cleanupControlsEnabled = false
+            return
+        }
         cleanupControlsEnabled = enabled
-        guard var root = activeRoot else { return }
-        root.accessMode = enabled ? .readWrite : .readOnly
-        activeRoot = root
-        Task { try? await BookmarkStore.default.upsert(root) }
+        savedLocations[index].scanRoot.accessMode = enabled ? .readWrite : .readOnly
+        activeRoot = savedLocations[index].scanRoot
+        persistLocations()
+        refreshSelectedReviewStates()
         statusLine = enabled
             ? "Deletion allowed · every deletion still requires confirmation"
             : "Deletion disabled · snapshot unchanged"
@@ -380,6 +386,10 @@ final class AppModel: ObservableObject {
             statusLine = "Choose a location first."
             return
         }
+        guard !isScanning else {
+            statusLine = "One location is already scanning. Stop it before starting another."
+            return
+        }
 
         activeCancellationState?.cancel()
         scanTask?.cancel()
@@ -387,8 +397,11 @@ final class AppModel: ObservableObject {
         activeCancellationState = cancellationState
         let scanID = UUID()
         activeScanID = scanID
+        let locationID = root.id
+        activeScanLocationID = locationID
+        let scanGeneration = UUID()
 
-        let preservesCurrentSnapshot = session?.rootURLBookmarkID == root.id
+        let preservesCurrentSnapshot = locationSnapshots[locationID] != nil
         dashboardMode = .map
         isScanning = true
         scannedNodeCount = 0
@@ -423,19 +436,24 @@ final class AppModel: ObservableObject {
             bookmarkDataIsStale: &stale
         ) else {
             isScanning = false
+            activeScanLocationID = nil
             scanTelemetry.activity = nil
             statusLine = "This location is no longer available. Choose it again."
+            markLocationNeedsAccessIfRequired(locationID)
             return
         }
 
         guard url.startAccessingSecurityScopedResource() else {
             isScanning = false
+            activeScanLocationID = nil
             scanTelemetry.activity = nil
             statusLine = "Access was denied. Choose the location again."
+            markLocationNeedsAccessIfRequired(locationID)
             return
         }
 
-        volumeSpace = VolumeSpaceSnapshot.read(from: url)
+        let scanVolumeSpace = VolumeSpaceSnapshot.read(from: url)
+        if selectedLocationID == locationID { volumeSpace = scanVolumeSpace }
 
         let options = ScanOptions(
             metric: sizeMetric,
@@ -479,7 +497,18 @@ final class AppModel: ObservableObject {
                             self.lastProgressSampleTime = now
                             self.lastProgressSampleCount = progress.scannedNodes
                             if let partialSession = progress.partialSession {
-                                self.publishSession(partialSession)
+                                let partialSnapshot = LocationSnapshot(
+                                    locationID: locationID,
+                                    session: partialSession,
+                                    scannedAt: scanStartedAt,
+                                    volumeSpace: scanVolumeSpace,
+                                    generation: scanGeneration
+                                )
+                                self.locationSnapshots[locationID] = partialSnapshot
+                                self.snapshotCatalogRevision &+= 1
+                                if self.selectedLocationID == locationID {
+                                    self.publishSession(partialSession)
+                                }
                             }
                         }
                     },
@@ -490,24 +519,53 @@ final class AppModel: ObservableObject {
 
                 await MainActor.run {
                     guard let self, self.activeScanID == scanID else { return }
-                    self.publishSession(final)
-                    self.isScanning = false
-                    self.scannedNodeCount = max(0, final.nodes.count - 1)
-                    self.holdCompletedScanActivity(
-                        scanID: scanID,
-                        startedAt: scanStartedAt,
-                        finalCount: self.scannedNodeCount,
-                        currentPath: url.path
+                    let scannedAt = Date()
+                    let completedSnapshot = LocationSnapshot(
+                        locationID: locationID,
+                        session: final,
+                        scannedAt: scannedAt,
+                        volumeSpace: scanVolumeSpace,
+                        generation: scanGeneration
                     )
+                    self.locationSnapshots[locationID] = completedSnapshot
+                    self.snapshotCatalogRevision &+= 1
+                    if self.selectedLocationID == locationID {
+                        self.publishSession(final)
+                        self.volumeSpace = scanVolumeSpace
+                    }
+                    self.isScanning = false
+                    self.activeScanLocationID = nil
+                    let completedCount = max(0, final.nodes.count - 1)
+                    if self.selectedLocationID == locationID {
+                        self.scannedNodeCount = completedCount
+                        self.holdCompletedScanActivity(
+                            scanID: scanID,
+                            startedAt: scanStartedAt,
+                            finalCount: completedCount,
+                            currentPath: url.path
+                        )
+                    } else {
+                        self.scanTelemetry.activity = nil
+                    }
                     self.scanTask = nil
                     self.activeCancellationState = nil
+                    self.recordCompletedScan(
+                        locationID: locationID,
+                        session: final,
+                        scannedAt: scannedAt,
+                        volumeSpace: scanVolumeSpace
+                    )
                     self.overviewCache.removeAll(keepingCapacity: true)
                     self.overviewGroupCache.removeAll(keepingCapacity: true)
                     self.mapLegendCache.removeAll(keepingCapacity: true)
-                    self.statusLine = "Updated just now · \(self.scannedNodeCount.formatted()) items"
-                    self.prepareMapLegendIfNeeded()
-                    self.prepareOverviewIfNeeded()
-                    if stale {
+                    if self.selectedLocationID == locationID {
+                        self.statusLine = "Updated just now · \(completedCount.formatted()) items"
+                        self.prepareMapLegendIfNeeded()
+                        self.prepareOverviewIfNeeded()
+                    }
+                    self.refreshSelectedReviewStates()
+                    self.prepareAppInventory()
+                    if stale, self.selectedLocationID == locationID {
                         self.statusLine += " · choose the location again if paths fail"
                     }
                 }
@@ -515,6 +573,8 @@ final class AppModel: ObservableObject {
                 await MainActor.run {
                     guard let self, self.activeScanID == scanID else { return }
                     self.isScanning = false
+                    let failedLocationID = self.activeScanLocationID
+                    self.activeScanLocationID = nil
                     self.scanTelemetry.activity = nil
                     self.scanTask = nil
                     self.activeCancellationState = nil
@@ -526,13 +586,18 @@ final class AppModel: ObservableObject {
                     } else {
                         wasCancelled = false
                     }
-                    if wasCancelled {
+                    if wasCancelled, self.selectedLocationID == failedLocationID {
                         self.statusLine = self.session == nil
                             ? "Scan stopped before a snapshot was ready"
                             : "Refresh stopped · showing the last available snapshot"
                         self.prepareOverviewIfNeeded()
-                    } else {
-                        self.statusLine = "Scan failed · \(error.localizedDescription)"
+                    } else if !wasCancelled {
+                        if self.selectedLocationID == failedLocationID {
+                            self.statusLine = "Scan failed · \(error.localizedDescription)"
+                        }
+                        if let failedLocationID {
+                            self.markLocationNeedsAccessIfRequired(failedLocationID)
+                        }
                     }
                 }
             }
@@ -576,15 +641,20 @@ final class AppModel: ObservableObject {
         // identity immediately so the interface never waits for that unwind and
         // no late progress or result can replace the snapshot on screen.
         activeScanID = UUID()
+        let cancelledLocationID = activeScanLocationID
+        activeScanLocationID = nil
         isScanning = false
         scanTelemetry.activity = nil
         scanTask = nil
         activeCancellationState = nil
-        if let session {
-            scannedNodeCount = max(0, session.nodes.count - 1)
+        if let cancelledLocationID,
+           let snapshot = locationSnapshots[cancelledLocationID],
+           selectedLocationID == cancelledLocationID {
+            publishSession(snapshot.session)
+            scannedNodeCount = max(0, snapshot.session.nodes.count - 1)
             statusLine = "Scan stopped · showing the latest snapshot"
             prepareOverviewIfNeeded()
-        } else {
+        } else if selectedLocationID == cancelledLocationID {
             scannedNodeCount = 0
             statusLine = "Scan stopped · ready when you are"
         }
@@ -595,7 +665,7 @@ final class AppModel: ObservableObject {
     }
 
     func closeSettings() {
-        appDestination = .workspace
+        appDestination = .scan
     }
 
     private func urlPathPlaceholder(for root: ScanRoot) -> String {
@@ -620,9 +690,43 @@ final class AppModel: ObservableObject {
         prepareSelectedOverviewGroupIfNeeded()
     }
 
-    private func publishSession(_ value: ScanSession?) {
+    func publishSession(_ value: ScanSession?) {
         session = value
         sessionRevision &+= 1
+    }
+
+    func presentLocationSnapshot(_ snapshot: LocationSnapshot?) {
+        overviewTask?.cancel()
+        overviewGroupTask?.cancel()
+        mapLegendTask?.cancel()
+        overviewCache.removeAll(keepingCapacity: true)
+        overviewGroupCache.removeAll(keepingCapacity: true)
+        mapLegendCache.removeAll(keepingCapacity: true)
+        overviewGroups = []
+        overviewLargestNodeIDs = []
+        mapFileTypeGroups = []
+        mapLocationGroups = []
+        selectOverviewGroup(nil)
+        selectNode(nil)
+        focusedNodeID = .root
+        hoveredNodeID = nil
+        publishSession(snapshot?.session)
+        volumeSpace = snapshot?.volumeSpace
+        scannedNodeCount = max(0, (snapshot?.session.nodes.count ?? 1) - 1)
+        if let snapshot, let location = selectedLocation {
+            statusLine = "Scanned \(snapshot.scannedAt.formatted(.relative(presentation: .named))) · \(scannedNodeCount.formatted()) items"
+            if location.availability != .ready { statusLine = "Snapshot only · source unavailable" }
+            prepareMapLegendIfNeeded()
+            prepareOverviewIfNeeded()
+        } else if let location = selectedLocation {
+            if let summary = location.lastScanSummary {
+                statusLine = "Last scanned \(summary.scannedAt.formatted(.relative(presentation: .named))) · rescan to inspect details"
+            } else {
+                statusLine = "\(location.displayName) is ready to scan"
+            }
+        } else {
+            statusLine = "Choose a saved location to begin"
+        }
     }
 
     private func resetVisibleOverviewIfNeeded() {

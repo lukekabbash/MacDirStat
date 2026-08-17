@@ -27,7 +27,7 @@ private struct SettingsPageHeader: View {
             Text("Settings")
                 .font(.system(size: 24, weight: .semibold))
                 .tracking(-0.35)
-            Text("Appearance, scan behavior, and deletion permissions for this Mac.")
+            Text("Appearance, scan behavior, and source-specific deletion permissions.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -126,7 +126,8 @@ private struct DeletionSettingsSection: View {
     var body: some View {
         SettingsGroup(
             title: "Deletion",
-            detail: "Browsing is always available. Deletion requires explicit permission."
+            detail: model.selectedLocation.map { "Browsing “\($0.displayName)” is always available. Deletion requires explicit permission." }
+                ?? "Select a saved location before allowing deletion."
         ) {
             SettingsToggleRow(
                 title: "Allow deletion",
@@ -136,6 +137,7 @@ private struct DeletionSettingsSection: View {
                 isOn: fileChangesBinding,
                 symbol: model.cleanupControlsEnabled ? "lock.open.fill" : "lock.fill"
             )
+            .disabled(model.selectedLocation == nil)
 
             HStack(alignment: .top, spacing: 9) {
                 Image(systemName: "shield.checkered")
