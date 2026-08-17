@@ -1,8 +1,8 @@
 import Core
 import SwiftUI
 
-/// A contextual inspector for an explicit selection. The containing column is
-/// permanent, so its content never resizes the map that produced the selection.
+/// A contextual inspector for an explicit selection. Its parent presents it
+/// over the trailing edge so revealing detail never resizes the source view.
 struct StorageInspectorView: View {
     let session: ScanSession
     let selectedNodeID: NodeID
@@ -173,32 +173,6 @@ struct StorageInspectorView: View {
         case .file: return "File"
         case .packageLeaf: return "App package or bundle"
         }
-    }
-}
-
-struct InspectorPlaceholderView: View {
-    let mode: DashboardMode
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-                Image(systemName: mode == .map ? "cursorarrow.click.2" : "chart.bar.doc.horizontal")
-                    .font(.system(size: 24, weight: .regular))
-                    .foregroundStyle(DiskVisualStyle.accent.opacity(0.72))
-                Text(mode == .map ? "Select a block" : "Select a row or segment")
-                    .font(.subheadline.weight(.semibold))
-                Text(mode == .map
-                    ? "The map stays fixed while details appear here. Double-click a folder block to zoom."
-                    : "Group totals and their largest files appear here without covering the charts."
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: 230, alignment: .leading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .padding(22)
-        .background(DiskVisualStyle.inspector)
-        .accessibilityElement(children: .combine)
     }
 }
 

@@ -172,7 +172,7 @@ struct ContentView: View {
     }
 
     private func workspace(session: ScanSession) -> some View {
-        HStack(spacing: 0) {
+        ZStack(alignment: .trailing) {
             Group {
                 switch model.dashboardMode {
                 case .map:
@@ -194,15 +194,44 @@ struct ContentView: View {
             }
             .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
 
-            Divider()
-            inspectorColumn(session: session)
-                .frame(width: 320)
-                .frame(maxHeight: .infinity)
+            if hasInspectorContent(in: session) {
+                inspectorColumn(session: session)
+                    .frame(width: 320)
+                    .frame(maxHeight: .infinity)
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(DiskVisualStyle.strongHairline)
+                            .frame(width: 1)
+                    }
+                    .shadow(color: .black.opacity(0.1), radius: 14, x: -3)
+                    .transition(inspectorTransition)
+                    .zIndex(1)
+            }
         }
+        .clipped()
+        .animation(
+            reduceMotion ? nil : DiskVisualStyle.contentMotion,
+            value: hasInspectorContent(in: session)
+        )
     }
 
-    /// The inspector is permanently reserved so selecting a block changes
-    /// information, never the geometry under the pointer.
+    private var inspectorTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .move(edge: .trailing).combined(with: .opacity)
+    }
+
+    private func hasInspectorContent(in session: ScanSession) -> Bool {
+        if model.dashboardMode == .overview,
+           let selectedGroupID = model.selectedOverviewGroupID,
+           model.overviewGroups.contains(where: { $0.id == selectedGroupID }) {
+            return true
+        }
+
+        guard let selectedNodeID = model.selectedNodeID else { return false }
+        return session.node(id: selectedNodeID) != nil
+    }
+
     @ViewBuilder
     private func inspectorColumn(session: ScanSession) -> some View {
         if model.dashboardMode == .overview,
@@ -215,7 +244,7 @@ struct ContentView: View {
                 metric: model.sizeMetric,
                 largestNodeIDs: model.overviewGroupLargestNodeIDs,
                 isPreparing: model.isPreparingOverviewGroup,
-                close: { model.selectOverviewGroup(nil) },
+                close: closeOverviewInspector,
                 selectNode: { selectNode($0) }
             )
         } else if let selectedID = model.selectedNodeID,
@@ -233,8 +262,6 @@ struct ContentView: View {
                 move: requestMove,
                 trash: requestTrash
             )
-        } else {
-            InspectorPlaceholderView(mode: model.dashboardMode)
         }
     }
 
@@ -301,6 +328,12 @@ struct ContentView: View {
     private func selectOverviewGroup(_ item: StorageBreakdownItem) {
         withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
             model.selectOverviewGroup(item.id)
+        }
+    }
+
+    private func closeOverviewInspector() {
+        withAnimation(reduceMotion ? nil : DiskVisualStyle.contentMotion) {
+            model.selectOverviewGroup(nil)
         }
     }
 
