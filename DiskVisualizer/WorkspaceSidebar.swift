@@ -13,7 +13,9 @@ struct WorkspaceSidebar: View {
     @State private var kindFilter: SidebarKindFilter = .all
     @State private var minimumSize: UInt64 = 0
     @FocusState private var searchFocused: Bool
-    @Namespace private var selectionSurface
+    @Namespace private var destinationSelectionSurface
+    @Namespace private var locationSelectionSurface
+    @Namespace private var nodeSelectionSurface
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,18 +69,21 @@ struct WorkspaceSidebar: View {
             SidebarDestinationRow(
                 title: "Scan", symbol: "square.grid.3x3.fill",
                 isSelected: model.appDestination == .scan,
-                badge: nil
-            ) { model.selectDestination(.scan) }
+                badge: nil,
+                selectionNamespace: destinationSelectionSurface
+            ) { selectDestination(.scan) }
             SidebarDestinationRow(
                 title: "Apps", symbol: "app.dashed",
                 isSelected: model.appDestination == .apps,
-                badge: completedLocationCount > 0 ? completedLocationCount.formatted() : nil
-            ) { model.selectDestination(.apps) }
+                badge: completedLocationCount > 0 ? completedLocationCount.formatted() : nil,
+                selectionNamespace: destinationSelectionSurface
+            ) { selectDestination(.apps) }
             SidebarDestinationRow(
                 title: "Review", symbol: "tray.full",
                 isSelected: model.appDestination == .review,
-                badge: model.reviewItems.isEmpty ? nil : model.reviewItems.count.formatted()
-            ) { model.selectDestination(.review) }
+                badge: model.reviewItems.isEmpty ? nil : model.reviewItems.count.formatted(),
+                selectionNamespace: destinationSelectionSurface
+            ) { selectDestination(.review) }
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 12)
@@ -121,7 +126,12 @@ struct WorkspaceSidebar: View {
                                 selected: model.selectedLocationID == location.id,
                                 scanning: model.activeScanLocationID == location.id && model.isScanning,
                                 metric: model.sizeMetric,
-                                select: { model.selectLocation(location.id) },
+                                selectionNamespace: locationSelectionSurface,
+                                select: {
+                                    withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+                                        model.selectLocation(location.id)
+                                    }
+                                },
                                 pin: { model.togglePin(location.id) },
                                 rename: { model.renameLocation(location.id) },
                                 reveal: { model.revealLocation(location.id) },
@@ -215,8 +225,12 @@ struct WorkspaceSidebar: View {
                     ScrollView {
                         LazyVStack(spacing: 2) {
                             ForEach(displayRows(in: session)) { row in
-                                SidebarNodeRow(row: row, selected: selectedNodeID == row.id) {
-                                    withAnimation(reduceMotion ? nil : DiskVisualStyle.settleMotion) {
+                                SidebarNodeRow(
+                                    row: row,
+                                    selected: selectedNodeID == row.id,
+                                    selectionNamespace: nodeSelectionSurface
+                                ) {
+                                    withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
                                         selectedNodeID = row.id
                                     }
                                 }
@@ -246,9 +260,12 @@ struct WorkspaceSidebar: View {
             title: model.appDestination == .settings ? "Back to Storage" : "Settings",
             symbol: model.appDestination == .settings ? "chevron.left" : "gearshape",
             isSelected: model.appDestination == .settings,
-            badge: nil
+            badge: nil,
+            selectionNamespace: destinationSelectionSurface
         ) {
-            model.appDestination == .settings ? model.closeSettings() : model.openSettings()
+            withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+                model.appDestination == .settings ? model.closeSettings() : model.openSettings()
+            }
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 10)
@@ -256,6 +273,12 @@ struct WorkspaceSidebar: View {
 
     private var searchTaskID: String {
         "\(model.sessionRevision):\(model.sizeMetric.rawValue):\(searchText)"
+    }
+
+    private func selectDestination(_ destination: AppDestination) {
+        withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
+            model.selectDestination(destination)
+        }
     }
 
     private func displayRows(in session: ScanSession) -> [SidebarNodeData] {

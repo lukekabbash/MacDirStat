@@ -36,6 +36,7 @@ struct SidebarDestinationRow: View {
     let symbol: String
     let isSelected: Bool
     let badge: String?
+    let selectionNamespace: Namespace.ID
     let action: () -> Void
     @State private var hovered = false
 
@@ -50,7 +51,15 @@ struct SidebarDestinationRow: View {
             .padding(.horizontal, 10)
             .frame(height: 34)
             .contentShape(Rectangle())
-            .background((isSelected ? DiskVisualStyle.selection : hovered ? DiskVisualStyle.subtleSurface : .clear), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background {
+                SidebarSelectionBackground(
+                    selected: isSelected,
+                    hovered: hovered,
+                    id: "destination-selection",
+                    namespace: selectionNamespace,
+                    cornerRadius: 8
+                )
+            }
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -62,6 +71,7 @@ struct SavedLocationRow: View {
     let selected: Bool
     let scanning: Bool
     let metric: SizeMetric
+    let selectionNamespace: Namespace.ID
     let select: () -> Void
     let pin: () -> Void
     let rename: () -> Void
@@ -87,7 +97,15 @@ struct SavedLocationRow: View {
             .padding(.horizontal, 8)
             .frame(height: 42)
             .contentShape(Rectangle())
-            .background((selected ? DiskVisualStyle.selection : hovered ? DiskVisualStyle.subtleSurface : .clear), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background {
+                SidebarSelectionBackground(
+                    selected: selected,
+                    hovered: hovered,
+                    id: "location-selection",
+                    namespace: selectionNamespace,
+                    cornerRadius: 8
+                )
+            }
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 }
@@ -140,6 +158,7 @@ struct SidebarNodeData: Identifiable {
 struct SidebarNodeRow: View {
     let row: SidebarNodeData
     let selected: Bool
+    let selectionNamespace: Namespace.ID
     let action: () -> Void
     @State private var hovered = false
     var body: some View {
@@ -151,9 +170,36 @@ struct SidebarNodeRow: View {
                 Text(StoragePresentation.bytes(row.size)).font(.caption2.monospacedDigit()).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 8).frame(height: 31).contentShape(Rectangle())
-            .background((selected ? DiskVisualStyle.selection : hovered ? DiskVisualStyle.subtleSurface : .clear), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .background {
+                SidebarSelectionBackground(
+                    selected: selected,
+                    hovered: hovered,
+                    id: "node-selection",
+                    namespace: selectionNamespace,
+                    cornerRadius: 7
+                )
+            }
         }
         .buttonStyle(.plain).onHover { hovered = $0 }.help(row.node.path)
+    }
+}
+
+private struct SidebarSelectionBackground: View {
+    let selected: Bool
+    let hovered: Bool
+    let id: String
+    let namespace: Namespace.ID
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        if selected {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(DiskVisualStyle.selection)
+                .matchedGeometryEffect(id: id, in: namespace)
+        } else if hovered {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(DiskVisualStyle.subtleSurface)
+        }
     }
 }
 

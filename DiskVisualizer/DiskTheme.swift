@@ -38,6 +38,7 @@ enum DiskAppearanceMode: String, CaseIterable, Identifiable {
 enum DiskThemeID: String, CaseIterable, Identifiable {
     case softGlass
     case integrator
+    case usonian
     case graphite
     case ash
     case midnight
@@ -56,6 +57,7 @@ enum DiskThemeID: String, CaseIterable, Identifiable {
         switch self {
         case .softGlass: return "Soft Glass"
         case .integrator: return "Integrator"
+        case .usonian: return "Usonian"
         case .graphite: return "Graphite"
         case .ash: return "Ash"
         case .midnight: return "Midnight"
@@ -74,6 +76,7 @@ enum DiskThemeID: String, CaseIterable, Identifiable {
         switch self {
         case .softGlass: return "Slate, mint, and lilac with quiet translucent depth."
         case .integrator: return "Pure black, white, graphite, and silver."
+        case .usonian: return "Warm American white with federal blue and brick red."
         case .graphite: return "Near-black mineral surfaces with a steel-blue signal."
         case .ash: return "Pale mineral gray with quiet ink and lake-blue controls."
         case .midnight: return "Inky blue-black depth with glacial-blue interaction."
@@ -151,6 +154,13 @@ enum DiskVisualStyle {
     static let motion = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.14)
     static let contentMotion = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.20)
     static let settleMotion = Animation.spring(response: 0.26, dampingFraction: 0.9, blendDuration: 0.06)
+    static let selectionMotion = Animation.interpolatingSpring(
+        mass: 0.7,
+        stiffness: 460,
+        damping: 38,
+        initialVelocity: 0
+    )
+    static let themeMotion = Animation.timingCurve(0.2, 0, 0, 1, duration: 0.18)
 
     static func previewColors(for theme: DiskThemeID, dark: Bool) -> [Color] {
         let variant = dark ? theme.definition.dark : theme.definition.light

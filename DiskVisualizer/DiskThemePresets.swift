@@ -40,6 +40,23 @@ enum DiskThemeCatalog {
                     border: 0x282828, borderStrong: 0x505050, danger: 0xB8B8B8
                 )
             )
+        case .usonian:
+            return DiskThemeDefinition(
+                light: DiskThemeVariant(
+                    accent: 0x365F82, accentStrong: 0x223F59,
+                    available: 0x3B7850, attention: 0x916814, neutral: 0x68717D,
+                    canvas: 0xF3F1EC, rail: 0xE8E8E4, panel: 0xF8F7F3,
+                    layer: 0xFCFBF8, inspector: 0xECEBE6,
+                    border: 0xD7D8D6, borderStrong: 0xA8ADB2, danger: 0xA64C48
+                ),
+                dark: DiskThemeVariant(
+                    accent: 0x83A9C8, accentStrong: 0xB3CCDE,
+                    available: 0x78B389, attention: 0xD0A65A, neutral: 0x969CA4,
+                    canvas: 0x17191D, rail: 0x202126, panel: 0x24262B,
+                    layer: 0x2D3036, inspector: 0x1C1E22,
+                    border: 0x34373C, borderStrong: 0x5E636A, danger: 0xD27B75
+                )
+            )
         case .graphite:
             return paired(
                 light: seed(0xF3F5F6, 0xE8ECEE, 0xFAFBFB, 0xFFFFFF, 0xEDF0F2, 0x547A98, 0x5F8B79, 0x8A7553),

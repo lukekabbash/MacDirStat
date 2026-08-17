@@ -3,6 +3,9 @@ import SwiftUI
 /// Settings remains part of the storage workspace: the rail does not change,
 /// and this single canvas keeps related choices visible without nested tabs.
 struct SettingsCanvas: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 34) {
@@ -18,6 +21,7 @@ struct SettingsCanvas: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(DiskVisualStyle.canvas)
+        .animation(reduceMotion ? nil : DiskVisualStyle.themeMotion, value: model.themeID)
     }
 }
 
@@ -36,6 +40,7 @@ private struct SettingsPageHeader: View {
 
 private struct AppearanceSettingsSection: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         SettingsGroup(
@@ -71,7 +76,11 @@ private struct AppearanceSettingsSection: View {
                         ThemeChoiceCard(
                             theme: theme,
                             isSelected: model.themeID == theme,
-                            action: { model.themeID = theme }
+                            action: {
+                                withAnimation(reduceMotion ? nil : DiskVisualStyle.themeMotion) {
+                                    model.themeID = theme
+                                }
+                            }
                         )
                     }
                 }
@@ -260,7 +269,7 @@ private struct InlineChoice<Item: Hashable>: View {
         HStack(spacing: 2) {
             ForEach(choices, id: \.self) { item in
                 Button {
-                    withAnimation(DiskVisualStyle.settleMotion) { selection = item }
+                    withAnimation(DiskVisualStyle.selectionMotion) { selection = item }
                 } label: {
                     Text(label(item))
                         .font(.caption.weight(.medium))

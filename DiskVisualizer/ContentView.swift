@@ -298,7 +298,7 @@ struct ContentView: View {
     }
 
     private func selectOverviewGroup(_ item: StorageBreakdownItem) {
-        withAnimation(reduceMotion ? nil : DiskVisualStyle.settleMotion) {
+        withAnimation(reduceMotion ? nil : DiskVisualStyle.selectionMotion) {
             model.selectOverviewGroup(item.id)
         }
     }

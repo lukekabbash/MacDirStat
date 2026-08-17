@@ -126,7 +126,7 @@ private struct DashboardModeControl: View {
         HStack(spacing: 2) {
             ForEach(DashboardMode.allCases, id: \.self) { mode in
                 Button {
-                    withAnimation(DiskVisualStyle.settleMotion) { selection = mode }
+                    withAnimation(DiskVisualStyle.selectionMotion) { selection = mode }
                 } label: {
                     Label(mode.displayName, systemImage: mode == .map ? "square.grid.3x3" : "chart.bar.xaxis")
                         .font(.caption2.weight(.medium))
