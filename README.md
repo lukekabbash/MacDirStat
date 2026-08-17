@@ -1,56 +1,128 @@
-# Mac Directory Statistics
+<p align="center">
+  <img src="DiskVisualizer/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="112" alt="Mac Directory Statistics app icon">
+</p>
 
-Mac Directory Statistics (`macdirstat`) is a native macOS storage explorer with a **SwiftUI** shell and a custom **AppKit** treemap. It launches idle, scans only after an explicit command, and keeps deletion controls locked until the user deliberately enables them. Built for **App Sandbox** using **user-selected read-write** access and **security-scoped bookmarks** (see [App Sandbox](https://developer.apple.com/documentation/xcode/configuring-the-macos-app-sandbox/), [user-selected read-write](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.security.files.user-selected.read-write), [security-scoped URLs](https://developer.apple.com/documentation/foundation/nsurl/startaccessingsecurityscopedresource%28%29)).
+<h1 align="center">Mac Directory Statistics</h1>
 
-## Repository layout
+<p align="center">
+  A native macOS storage map for seeing exactly where space went—before deciding what to move.
+</p>
 
-| Area | Role |
-|------|------|
-| `Sources/Core` | Scanning, saved-location persistence, source-aware projections, review validation, treemap layout math, and shared action eligibility |
-| `Sources/Treemap` | AppKit treemap surface + SwiftUI bridge |
-| `DiskVisualizer/` | App target: saved-location rail, Scan, Apps, Review, Settings, inspectors, Quick Look, and guarded file actions |
-| `DiskVisualizer.xcodeproj` | Ships the sandboxed `.app` and links local Swift packages |
+<p align="center">
+  <a href="https://github.com/lukekabbash/mac-directory-statistics/releases/latest"><strong>Download the latest release</strong></a>
+  &nbsp;·&nbsp; macOS 14+
+  &nbsp;·&nbsp; Apple silicon and Intel
+  &nbsp;·&nbsp; MIT licensed
+</p>
 
-**License:** MIT. **Platform:** macOS 14+ (universal binary when archived in Xcode).
+<p align="center">
+  <img src="docs/images/storage-map.png" width="100%" alt="A privacy-safe Mac Directory Statistics treemap showing storage as proportional colored blocks">
+</p>
+
+Mac Directory Statistics (`macdirstat`) turns an opaque drive or folder into a navigable map. Choose the full Mac, an attached volume, or one focused folder; watch the map fill as the scan progresses; then move between blocks, file types, applications, and exact item details without losing context.
+
+It launches idle, keeps every saved location independent, and leaves deletion disabled until you explicitly allow it for the selected source. The goal is a fast, legible answer to one question: **what is actually using this space?**
+
+> The screenshots in this README are rendered from the real app views with a synthetic `/Demo Storage` snapshot. They contain no personal filenames or paths.
 
 ## Install
 
-Download the latest universal DMG from [GitHub Releases](https://github.com/lukekabbash/MacDirStat/releases/latest), open it, and drag **Mac Directory Statistics** to **Applications**. The v0.1.0 preview is ad-hoc signed, so its first launch requires Control-clicking the installed app and choosing **Open**; no terminal command is required. Apple Developer ID signing and notarization are already supported by the release pipeline once the repository secrets are configured.
+1. Download the universal macOS DMG from the [latest GitHub release](https://github.com/lukekabbash/mac-directory-statistics/releases/latest).
+2. Open the DMG and drag **Mac Directory Statistics** into **Applications**.
+3. For v0.1.0, Control-click the app the first time, choose **Open**, and confirm **Open**.
 
-## Build (contributors)
+The current preview is checksum-verified and ad-hoc signed, but not yet Apple-notarized. The one-time Control-click is required because macOS cannot establish a verified Developer ID publisher yet; no terminal command is needed.
 
-1. Open `DiskVisualizer.xcodeproj` in Xcode 15+ on a Mac.
-2. Select the **DiskVisualizer** scheme and **Run**.
+## See the whole shape of a scan
 
-Swift Package tests (Core logic, no AppKit in tests):
+The map is the primary surface, not a decorative summary. Every block is proportional to its size. Color can follow file type or top-level location, folders can be opened in place, and the optional capacity view adds free space and used space outside the selected scan without pretending those bytes belong to the folder.
+
+- **Map while scanning.** The treemap grows while a determinate progress bar moves toward a measured total.
+- **Map or Overview.** Move from spatial hierarchy to a donut, ranked distribution bars, and the largest individual items.
+- **On disk or logical size.** Use allocated bytes for practical disk pressure and logical bytes when file length is the better question.
+- **Saved locations, separate snapshots.** A folder, drive, or full-Mac scan keeps its own state and is never silently combined with another source.
+- **Search and inspect without reflow.** Selection details stay in a fixed inspector so the map does not move under the pointer.
+
+<table>
+  <tr>
+    <td width="68%">
+      <img src="docs/images/storage-overview.png" alt="File-type overview with a donut chart, ranked bars, and largest individual files">
+    </td>
+    <td width="32%">
+      <img src="docs/images/guarded-inspector.png" alt="Inspector for a generic application bundle with deletion visibly disabled">
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Overview</strong><br>Compare exact, non-overlapping file-type or location groups, then inspect the largest concrete items.</td>
+    <td><strong>Inspector</strong><br>See path, allocated and logical sizes, attributes, share of the scan, and guarded actions.</td>
+  </tr>
+</table>
+
+## Deliberate from the first click
+
+Nothing scans just because the app opened. Pick a saved location and press **Scan**, or choose **New Scan** to grant access to a new source. Detailed progress first estimates from observed work, then locks to an exact denominator while the map continues to fill.
+
+<p align="center">
+  <img src="docs/images/scan-progress.png" width="760" alt="Determinate scan progress at 87 percent using a generic demo location">
+</p>
+
+The app treats filesystem access as visible product state: a saved location can be ready, disconnected, or in need of renewed permission. Selecting a source never disguises an old snapshot as a new scan.
+
+The app stays inside the macOS App Sandbox and reads only locations you explicitly select. Saved access is carried by security-scoped bookmarks rather than broad, invisible filesystem permission.
+
+## Deletion is a permission, not a mode
+
+Mac Directory Statistics is useful with deletion completely disabled—and that is how every launch begins.
+
+- **Allow deletion** is scoped to the selected source and resets off when the app quits.
+- Every Move or Move to Trash request rechecks the item against the snapshot immediately before acting.
+- Every filesystem change has a final confirmation.
+- Moves are restricted to a verified destination on the same volume.
+- A successful change invalidates only the affected snapshot instead of quietly repainting stale data.
+- The app never permanently erases an item and never empties Trash.
+
+## A quieter frame, useful color
+
+Storage categories keep stable colors while the surrounding interface stays restrained. **Soft Glass** is the default, with light and dark appearance controls plus presets including Integrator, Usonian, Graphite, Midnight, Paper, Sage, and High Contrast. Reduced-motion and keyboard-accessible paths are built into the same interface rather than maintained as a separate experience.
+
+<p align="center">
+  <img src="docs/images/settings-themes.png" width="900" alt="Mac Directory Statistics settings showing appearance themes, scan controls, and deletion disabled">
+</p>
+
+## Apps and Review
+
+**Apps** projects application bundles from completed snapshots and keeps each result tied to its source and scan date. **Review** contains only items you deliberately add; it does not invent cleanup recommendations or automatically queue files for removal. Removing something from Review removes only the reference, not the file.
+
+## Built as a small native Mac app
+
+The interface is SwiftUI around a custom AppKit treemap built for fast drawing and stable pointer hit-testing. Scanning, snapshots, projections, and file-action eligibility live in a small Swift package that can be tested without launching the app.
+
+| Area | Responsibility |
+| --- | --- |
+| `Sources/Core` | Scanning, immutable snapshots, saved locations, review validation, storage breakdowns, and action eligibility |
+| `Sources/Treemap` | Treemap layout, semantic color, drawing, hit testing, selection, and zoom |
+| `DiskVisualizer/` | Native app shell, Scan, Apps, Review, Settings, inspectors, Quick Look, and guarded file actions |
+| `scripts/release/` | Universal build, signing, packaging, verification, notarization, and checksums |
+
+### Build from source
+
+1. Open `DiskVisualizer.xcodeproj` in Xcode 15 or newer.
+2. Select the **DiskVisualizer** scheme and run it on macOS 14 or newer.
+
+Run the Core package tests from Terminal:
 
 ```bash
 swift test
 ```
 
-## Product boundary
+Release builds and acceptance steps are documented in [`docs/RELEASING.md`](docs/RELEASING.md) and [`docs/RELEASE_ACCEPTANCE.md`](docs/RELEASE_ACCEPTANCE.md).
 
-- No launch-time scan: restoring or selecting a saved source stays idle. **New Scan** starts after the user explicitly chooses a folder or volume; an existing sidebar source starts from **Scan** or **Refresh**.
-- Saved locations persist access and compact scan summaries only. Each completed location keeps an independent in-memory snapshot; the app never combines unrelated roots into a misleading total or map.
-- Default **allocated** bytes (`URLResourceKey.fileAllocatedSizeKey` / `totalFileAllocatedSizeKey`) with **logical** size shown alongside; APFS clones and shared content mean totals may not match Finder exactly—nodes can surface `mayShareFileContentKey` when the system provides it.
-- **Symlinks are not followed.** **Packages** can be shown as one compact map tile (default), while their contents are measured so their displayed total remains meaningful.
-- The map can color by **file type** or **top-level location**. The overview has a donut, ranked bar chart, aggregate inspectors, and a largest-items list, all grouped without directory double-counting.
-- **Apps** is a projection of app bundles found in completed snapshots, with its source and snapshot date always visible. **Review** contains only items the user explicitly adds from Scan or Apps.
-- The always-visible capacity strip shows physical used and available space for the containing volume. The optional **Capacity** map mode also represents free space and used space outside the selected scan without changing the underlying folder snapshot.
-- Deletion is disabled independently for every source and resets to off on launch. Once enabled, an item is rechecked against its owning snapshot before Move… or Move to Trash; moves are limited to the same volume, every change requires confirmation, successful changes invalidate the source snapshot, and Trash is never emptied by the app.
+## Current boundaries
 
-## Responsiveness
+This release does not scan in the background, merge unrelated volumes into one total, find duplicates, execute cross-volume transfers, or automate cleanup. APFS clones, sparse files, purgeable data, and shared blocks can also make a folder total differ from the physical space that deleting it ultimately reclaims; the app keeps allocated and logical measurements explicit rather than promising an impossible single truth.
 
-- Scan snapshots arrive more frequently at the start, then back off sharply for large trees so the UI does not repeatedly copy and redraw the full index.
-- Direct-child links are captured while scanning, so navigation and treemap rebuilds do not search the entire node list just to open a folder.
-- Overview computation runs off the main actor and keeps only compact group totals and a small largest-item shortlist.
+## A note of thanks
 
-## Deliberate non-goals for this release
+Mac Directory Statistics is openly inspired by [WinDirStat](https://windirstat.net/), which has helped me understand, clean up, and rescue space on my Windows desktops for years. Its directness—and its insistence that a disk should be something you can *see*—is a big part of why this project exists. Thank you to WinDirStat’s maintainers and contributors for building and caring for such a useful tool.
 
-The app does not run background scans, build aggregate cross-volume maps, execute cross-volume transfers, find duplicates, or automate cleanup. Those workflows need separate state and recovery models; they are not disguised as extensions of the current source-scoped snapshot.
-
-## CI
-
-GitHub Actions (`.github/workflows/macos.yml`) runs `swift test` and `xcodebuild` on `macos-14`.
-
-Tagged releases use `.github/workflows/release-macos.yml` to build and verify one universal Apple silicon + Intel app, then publish a DMG, ZIP, and SHA-256 manifest. Maintainer steps and optional notarization secrets are documented in [docs/RELEASING.md](docs/RELEASING.md).
+This is an independent macOS project and is not affiliated with WinDirStat.
