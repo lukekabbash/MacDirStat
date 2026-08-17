@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Standardized public copy and release tooling on the full Mac Directory Statistics product name.
 - Added explicit, compressed, read-only scan snapshots beneath each saved location, with bounded retention and corruption isolation.
 - Added a drillable Sunburst hierarchy alongside the summary overview.
 - Added native context menus to map blocks and Sunburst sections for opening, previewing, revealing in Finder, copying paths, and adding items to Review.
