@@ -35,7 +35,7 @@ for architecture in arm64 x86_64; do
   [[ " ${architectures} " == *" ${architecture} "* ]] || release_die "release executable is missing ${architecture}"
 done
 
-mount_point="$(mktemp -d "${TMPDIR:-/tmp}/macdirstat-mount.XXXXXX")"
+mount_point="$(mktemp -d "${TMPDIR:-/tmp}/mac-directory-statistics-mount.XXXXXX")"
 attached=0
 cleanup_mount() {
   if [[ "${attached}" == "1" ]]; then

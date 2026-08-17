@@ -17,7 +17,7 @@ target="${1:-}"
 submission="${target}"
 temporary=""
 if [[ "${target}" == *.app ]]; then
-  temporary="$(mktemp "${TMPDIR:-/tmp}/macdirstat-notary.XXXXXX.zip")"
+  temporary="$(mktemp "${TMPDIR:-/tmp}/mac-directory-statistics-notary.XXXXXX.zip")"
   trap '[[ -z "${temporary}" ]] || find "${temporary}" -depth -delete' EXIT
   ditto -c -k --sequesterRsrc --keepParent "${target}" "${temporary}"
   submission="${temporary}"

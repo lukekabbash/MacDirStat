@@ -19,7 +19,7 @@
   <img src="docs/images/storage-map.png" width="100%" alt="A privacy-safe Mac Directory Statistics treemap showing storage as proportional colored blocks">
 </p>
 
-Mac Directory Statistics (`macdirstat`) turns an opaque drive or folder into a navigable map. Choose the full Mac, an attached volume, or one focused folder; watch the map fill as the scan progresses; then move between blocks, file types, applications, and exact item details without losing context.
+Mac Directory Statistics turns an opaque drive or folder into a navigable map. Choose the full Mac, an attached volume, or one focused folder; watch the map fill as the scan progresses; then move between blocks, file types, applications, and exact item details without losing context.
 
 It launches idle, keeps every saved location independent, and leaves deletion disabled until you explicitly allow it for the selected source. The goal is a fast, legible answer to one question: **what is actually using this space?**
 

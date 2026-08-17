@@ -19,7 +19,7 @@ dmg_path="${output_dir}/${stem}.dmg"
 [[ ! -e "${zip_path}" && ! -e "${dmg_path}" ]] || release_die "refusing to overwrite existing release artifacts"
 mkdir -p "${output_dir}"
 
-staging="$(mktemp -d "${TMPDIR:-/tmp}/macdirstat-package.XXXXXX")"
+staging="$(mktemp -d "${TMPDIR:-/tmp}/mac-directory-statistics-package.XXXXXX")"
 trap 'release_cleanup_tree "${staging}"' EXIT
 ditto "${app_path}" "${staging}/$(release_app_name)"
 ln -s /Applications "${staging}/Applications"
